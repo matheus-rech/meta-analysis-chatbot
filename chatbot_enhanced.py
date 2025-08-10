@@ -525,6 +525,27 @@ def handle_multimodal_submit(message: dict, history: list, model_name: str, shou
         tool_wrapper = EnhancedMCPToolWrapper()
         llm = get_llm_client(model_name)
         
+        # Helper: extract session id from prior bot messages
+        def _extract_session_id_from_history(h: list) -> Optional[str]:
+            for (_u, b) in reversed(h):
+                if not b:
+                    continue
+                # Look for pattern 'Session ID: <id>' in bot text
+                m = re.search(r"Session ID:\s*([a-f0-9]{16,})", str(b), re.IGNORECASE)
+                if m:
+                    return m.group(1)
+            return None
+
+        # Helper: parse MCP server 'result' content wrapper
+        def _parse_mcp_result_content(result_obj: dict) -> Optional[dict]:
+            try:
+                content = result_obj.get("content") or []
+                if content and isinstance(content, list) and content[0].get("type") == "text":
+                    return json.loads(content[0]["text"])  # payload from R
+            except Exception:
+                return None
+            return None
+
         # Process any attached files
         file_context = ""
         if files:
@@ -572,6 +593,52 @@ def handle_multimodal_submit(message: dict, history: list, model_name: str, shou
                     except Exception as e:
                         file_context += f"\n\nError reading {ext} file: {str(e)}"
         
+        # Build dynamic system context: session status + Cochrane guidance
+        dynamic_context_lines: List[str] = []
+        session_id = _extract_session_id_from_history(history[:-1])
+        if session_id:
+            status_raw = tool_wrapper.call_mcp_tool(
+                "get_session_status",
+                {"session_id": session_id}
+            )
+            status = _parse_mcp_result_content(status_raw) or {}
+            if status.get("status") == "success":
+                cfg = (status.get("configuration") or {})
+                n_studies = ((status.get("data_info") or {}).get("n_studies"))
+                dynamic_context_lines.append("[SESSION]")
+                dynamic_context_lines.append(f"id={status.get('session_id')}")
+                dynamic_context_lines.append(f"stage={status.get('workflow_stage')}")
+                dynamic_context_lines.append(f"study_type={cfg.get('study_type')}")
+                dynamic_context_lines.append(f"effect_measure={cfg.get('effect_measure')}")
+                dynamic_context_lines.append(f"analysis_model={cfg.get('analysis_model')}")
+                if n_studies is not None:
+                    dynamic_context_lines.append(f"n_studies={n_studies}")
+
+                # Minimal Cochrane-aligned hints (runtime)
+                guidance_hints: List[str] = []
+                if isinstance(n_studies, int) and n_studies < 10:
+                    guidance_hints.append(
+                        "Publication bias tests have low power with <10 studies; discuss risk qualitatively."
+                    )
+                if (cfg.get('analysis_model') or '').lower() == 'fixed':
+                    guidance_hints.append(
+                        "Fixed-effect assumes one true effect; if clinical/methodological diversity exists, prefer random-effects."
+                    )
+                if (cfg.get('effect_measure') or '').upper() in {"MD", "SMD"}:
+                    guidance_hints.append(
+                        "For continuous outcomes: use MD when scales are identical; SMD when scales differ."
+                    )
+                if (cfg.get('effect_measure') or '').upper() in {"OR", "RR"}:
+                    guidance_hints.append(
+                        "For binary outcomes: ensure data include event counts and totals (event1,n1,event2,n2)."
+                    )
+                if guidance_hints:
+                    dynamic_context_lines.append("[COCHRANE_HINTS]")
+                    for gh in guidance_hints:
+                        dynamic_context_lines.append(f"- {gh}")
+
+        dynamic_context = "\n".join(dynamic_context_lines) if dynamic_context_lines else ""
+
         # Combine prompt with file context
         full_prompt = text_prompt
         if file_context:
@@ -618,12 +685,18 @@ def handle_multimodal_submit(message: dict, history: list, model_name: str, shou
         ]
         
         # Create the agent
-        prompt = ChatPromptTemplate.from_messages([
+        # Include dynamic context as a second system message when available
+        messages_spec = [
             ("system", SYSTEM_PROMPT),
+        ]
+        if dynamic_context:
+            messages_spec.append(("system", "{dynamic_context}"))
+        messages_spec.extend([
             MessagesPlaceholder(variable_name="chat_history"),
             ("human", "{input}"),
-            MessagesPlaceholder(variable_name="agent_scratchpad")
+            MessagesPlaceholder(variable_name="agent_scratchpad"),
         ])
+        prompt = ChatPromptTemplate.from_messages(messages_spec)
         
         agent = create_openai_tools_agent(llm, tools, prompt)
         
@@ -650,7 +723,10 @@ def handle_multimodal_submit(message: dict, history: list, model_name: str, shou
         )
         
         # Execute the agent
-        response = agent_executor.invoke({"input": full_prompt})
+        if dynamic_context:
+            response = agent_executor.invoke({"input": full_prompt, "dynamic_context": dynamic_context})
+        else:
+            response = agent_executor.invoke({"input": full_prompt})
         bot_response = response["output"]
         
         # Save the response if enabled
