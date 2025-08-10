@@ -13,3 +13,6 @@ langchain
 langchain-openai
 langchain-anthropic
 tiktoken
+pytz
+pillow
+PyPDF2

@@ -1,0 +1,22 @@
+{
+  "timestamp": "Sun Aug 10 20:23:38 -03 2025",
+  "python_version": "3.13.5 (main, Jun 11 2025, 15:36:57) [Clang 17.0.0 (clang-1700.0.13.3)]",
+  "project_root": "/Users/matheusrech/MEGA/Meta-Repo/meta-analysis-chatbot",
+  "environment_variables": {
+    "PYTHONPATH": "/Users/matheusrech/MEGA/Meta-Repo/meta-analysis-chatbot",
+    "DEBUG_R": "1",
+    "GRADIO_MCP_SERVER": "true",
+    "ENABLE_BACKGROUND_AGENTS": "true"
+  },
+  "directories": {
+    "config": true,
+    "sessions": true,
+    "logs": true,
+    "metrics": true
+  },
+  "configurations": {
+    "cursor_env": true,
+    "agent_config": true,
+    "vscode_settings": true
+  }
+}

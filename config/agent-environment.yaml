@@ -1,0 +1,266 @@
+# Agent Environment Configuration
+# Enhanced capabilities for background agents in Meta-Analysis Chatbot
+
+version: "1.0"
+
+# Core Agent Configuration
+agents:
+  # Statistical Analysis Agent
+  statistical_agent:
+    enabled: true
+    type: background
+    capabilities:
+      - meta_analysis
+      - heterogeneity_assessment
+      - publication_bias_detection
+      - sensitivity_analysis
+      - subgroup_analysis
+    triggers:
+      - on_data_upload
+      - on_analysis_request
+    resources:
+      max_memory: 2GB
+      max_cpu: 50%
+      timeout: 300s
+    
+  # Code Quality Agent
+  code_quality_agent:
+    enabled: true
+    type: continuous
+    capabilities:
+      - linting
+      - type_checking
+      - complexity_analysis
+      - security_scanning
+    triggers:
+      - on_file_save
+      - on_commit
+    tools:
+      - flake8
+      - mypy
+      - bandit
+      - radon
+    
+  # Test Automation Agent
+  test_automation_agent:
+    enabled: true
+    type: scheduled
+    capabilities:
+      - unit_testing
+      - integration_testing
+      - ui_testing
+      - performance_testing
+    schedule:
+      on_commit: true
+      on_pr: true
+      nightly: true
+    parallel_execution: true
+    max_parallel: 3
+    
+  # Documentation Agent
+  documentation_agent:
+    enabled: true
+    type: reactive
+    capabilities:
+      - api_doc_generation
+      - code_commenting
+      - readme_updates
+      - changelog_generation
+    triggers:
+      - on_function_change
+      - on_api_change
+    output:
+      format: markdown
+      location: ./docs
+    
+  # Performance Monitor Agent
+  performance_agent:
+    enabled: true
+    type: continuous
+    capabilities:
+      - memory_profiling
+      - cpu_monitoring
+      - response_time_tracking
+      - bottleneck_detection
+    interval: 300s
+    alerts:
+      memory_threshold: 80%
+      cpu_threshold: 70%
+      response_time_ms: 5000
+    
+  # Cochrane Guidance Agent
+  cochrane_agent:
+    enabled: true
+    type: advisory
+    capabilities:
+      - methodology_checking
+      - bias_assessment
+      - quality_evaluation
+      - recommendation_generation
+    knowledge_base:
+      - cochrane_handbook_v6.3
+      - prisma_guidelines
+      - grade_framework
+    auto_suggest: true
+    
+  # Data Validation Agent
+  validation_agent:
+    enabled: true
+    type: preprocessing
+    capabilities:
+      - data_format_checking
+      - statistical_validation
+      - outlier_detection
+      - completeness_checking
+    rules:
+      min_studies: 2
+      max_studies: 10000
+      required_columns: [study, effect_size, se]
+      
+  # Report Generation Agent
+  report_agent:
+    enabled: true
+    type: post_processing
+    capabilities:
+      - html_generation
+      - pdf_creation
+      - latex_formatting
+      - interactive_plots
+    templates:
+      - cochrane_style
+      - prisma_style
+      - custom
+    
+  # LLM Orchestration Agent
+  llm_orchestrator:
+    enabled: true
+    type: coordinator
+    capabilities:
+      - request_routing
+      - context_management
+      - response_synthesis
+      - fallback_handling
+    providers:
+      primary: anthropic
+      secondary: openai
+      fallback: local
+    context_window: 128000
+    
+  # Security Agent
+  security_agent:
+    enabled: true
+    type: guardian
+    capabilities:
+      - input_sanitization
+      - injection_prevention
+      - rate_limiting
+      - audit_logging
+    policies:
+      max_file_size: 10MB
+      allowed_file_types: [csv, xlsx, json]
+      rate_limit_per_minute: 60
+
+# Agent Communication
+communication:
+  protocol: json-rpc
+  transport: stdio
+  message_queue: redis
+  pub_sub_enabled: true
+  
+# Resource Management
+resources:
+  total_memory_limit: 8GB
+  total_cpu_limit: 4
+  max_concurrent_agents: 10
+  priority_queue: true
+  
+# Monitoring & Telemetry
+monitoring:
+  enabled: true
+  metrics:
+    - agent_execution_time
+    - agent_success_rate
+    - resource_utilization
+    - error_frequency
+  export:
+    format: prometheus
+    endpoint: /metrics
+    interval: 60s
+    
+# Error Handling
+error_handling:
+  retry_policy:
+    max_retries: 3
+    backoff_multiplier: 2
+    max_backoff: 60s
+  fallback_strategies:
+    - graceful_degradation
+    - alternative_provider
+    - cached_response
+  alert_channels:
+    - console
+    - log_file
+    - webhook
+    
+# Caching Strategy
+caching:
+  enabled: true
+  strategies:
+    analysis_results:
+      ttl: 3600s
+      invalidate_on: data_change
+    forest_plots:
+      ttl: 7200s
+      invalidate_on: analysis_change
+    reports:
+      ttl: 86400s
+      invalidate_on: any_change
+      
+# Feature Flags
+features:
+  advanced_heterogeneity:
+    enabled: true
+    agents: [statistical_agent, cochrane_agent]
+  network_meta_analysis:
+    enabled: false
+    required_agents: [statistical_agent]
+  bayesian_analysis:
+    enabled: false
+    required_agents: [statistical_agent]
+  real_time_collaboration:
+    enabled: false
+    required_agents: [llm_orchestrator]
+    
+# Development Settings
+development:
+  debug_mode: true
+  verbose_logging: true
+  agent_introspection: true
+  performance_profiling: true
+  hot_reload: true
+  
+# Production Settings
+production:
+  debug_mode: false
+  verbose_logging: false
+  agent_introspection: false
+  performance_profiling: false
+  hot_reload: false
+  ssl_enabled: true
+  
+# Deployment Configuration
+deployment:
+  strategy: blue_green
+  health_checks:
+    - endpoint: /health
+      interval: 30s
+      timeout: 5s
+  readiness_checks:
+    - endpoint: /ready
+      initial_delay: 10s
+      period: 5s
+  auto_scaling:
+    enabled: true
+    min_instances: 1
+    max_instances: 10
+    target_cpu: 70%

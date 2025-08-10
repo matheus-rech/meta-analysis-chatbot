@@ -1,3 +1,94 @@
 {
-  "agentCanUpdateSnapshot": true
+  "agentCanUpdateSnapshot": true,
+  "agentCapabilities": {
+    "canExecuteTools": true,
+    "canAccessMCP": true,
+    "canRunBackground": true,
+    "canModifyCode": true,
+    "canAccessFiles": true,
+    "canRunTests": true,
+    "canDeployServices": true
+  },
+  "mcpIntegration": {
+    "enabled": true,
+    "servers": {
+      "metaAnalysis": {
+        "type": "stdio",
+        "path": "server.py",
+        "capabilities": ["tools", "resources", "prompts"]
+      },
+      "gradioNative": {
+        "type": "http",
+        "url": "http://localhost:7860/gradio_api/mcp/sse",
+        "capabilities": ["tools", "sse"]
+      }
+    }
+  },
+  "aiAssistants": {
+    "primary": {
+      "model": "claude-3-opus",
+      "temperature": 0.7,
+      "maxTokens": 4096,
+      "capabilities": ["code", "analysis", "testing", "documentation"]
+    },
+    "codeReview": {
+      "model": "gpt-4-turbo",
+      "temperature": 0.3,
+      "capabilities": ["review", "refactor", "optimize"]
+    }
+  },
+  "backgroundAgents": {
+    "testRunner": {
+      "enabled": true,
+      "schedule": "on_commit",
+      "command": "python tests/run_all_tests.py"
+    },
+    "lintChecker": {
+      "enabled": true,
+      "schedule": "on_save",
+      "command": "flake8 . --config=.flake8"
+    },
+    "docGenerator": {
+      "enabled": true,
+      "schedule": "on_change",
+      "command": "python scripts/generate_docs.py"
+    },
+    "performanceMonitor": {
+      "enabled": true,
+      "schedule": "continuous",
+      "interval": 300,
+      "command": "python scripts/monitor_performance.py"
+    }
+  },
+  "developmentTools": {
+    "autoComplete": true,
+    "inlineHints": true,
+    "errorHighlighting": true,
+    "autoFormat": true,
+    "semanticHighlighting": true
+  },
+  "integrations": {
+    "github": {
+      "enabled": true,
+      "autoCommit": false,
+      "autoPR": true,
+      "branchProtection": true
+    },
+    "docker": {
+      "enabled": true,
+      "autoRebuild": true,
+      "registry": "ghcr.io"
+    },
+    "monitoring": {
+      "enabled": true,
+      "service": "datadog",
+      "metrics": ["performance", "errors", "usage"]
+    }
+  },
+  "resourceLimits": {
+    "maxConcurrentAgents": 5,
+    "maxMemoryPerAgent": "2GB",
+    "maxCPUPerAgent": "50%",
+    "timeoutSeconds": 300
+  }
 }
