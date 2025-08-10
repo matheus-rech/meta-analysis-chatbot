@@ -1,0 +1,338 @@
+
+# Meta-Analysis AI Chatbot Guide
+
+## Project Overview
+
+The Meta-Analysis AI Chatbot is an intelligent conversational assistant for conducting comprehensive meta-analyses, combining LLM-powered interfaces with R's statistical capabilities. The project provides researchers with natural language interaction for complex statistical workflows.
+
+### Key Technologies
+
+- **Frontend**: Gradio (Python web UI framework)
+- **AI**: OpenAI GPT-4 or Anthropic Claude via API
+- **Statistical Engine**: R with 'meta' and 'metafor' packages
+- **Integration**: Python-R subprocess communication
+- **Tool Orchestration**: Machine-Client Protocol (MCP) pattern
+- **Deployment**: Docker containers, Hugging Face Spaces compatible
+
+### Architecture
+
+The system follows a layered architecture:
+1. **User Interface Layer**: Gradio web interface with chat or direct tool access
+2. **Orchestration Layer**: LLM-powered assistant or direct Python controller
+3. **Tool Layer**: Python-R bridge with subprocess communication
+4. **Statistical Layer**: R scripts for meta-analysis computations
+
+## Getting Started
+
+### Prerequisites
+
+- **Python**: 3.8+ with pip
+- **R**: 4.0+ with required packages
+- **LLM API Keys**: OpenAI or Anthropic (for chatbot functionality)
+- **Docker**: (optional) For containerized deployment
+
+### Installation
+
+#### Local Development
+
+```bash
+# Clone the repository
+git clone https://github.com/yourusername/meta-analysis-chatbot.git
+cd meta-analysis-chatbot
+
+# Install Python dependencies
+pip install -r requirements-chatbot.txt
+
+# Set API key (choose one)
+export OPENAI_API_KEY="your-openai-key"
+export ANTHROPIC_API_KEY="your-anthropic-key"
+```
+
+#### Install R Dependencies
+
+```R
+# Run in R console
+install.packages(c("meta", "metafor", "jsonlite", "ggplot2", "rmarkdown", "knitr"))
+```
+
+### Running the Application
+
+Choose one of the implementation options:
+
+```bash
+# LangChain-enhanced chatbot (recommended)
+python chatbot_langchain.py
+
+# Basic chatbot implementation
+python chatbot_app.py
+
+# Native Gradio MCP implementation
+python gradio_native_mcp.py
+
+# Pure R implementation (if using meta_analysis_gradio.R)
+Rscript meta_analysis_gradio.R
+```
+
+Access the web interface at: http://localhost:7860
+
+### Docker Deployment
+
+```bash
+# Build the image
+docker build -f Dockerfile.chatbot -t meta-analysis-chatbot .
+
+# Run with API key
+docker run -p 7860:7860 \
+  -e OPENAI_API_KEY="your-key" \
+  meta-analysis-chatbot
+```
+
+### Configuration Options
+
+Environment variables:
+- `OPENAI_API_KEY`: OpenAI API key
+- `ANTHROPIC_API_KEY`: Anthropic API key (alternative)
+- `SESSIONS_DIR`: Directory for session storage
+- `GRADIO_SERVER_NAME`: Server binding (default: 0.0.0.0)
+- `GRADIO_SERVER_PORT`: Port (default: 7860)
+
+## Project Structure
+
+```
+meta-analysis-chatbot/
+├── chatbot_langchain.py       # Main chatbot with LangChain integration
+├── chatbot_app.py             # Basic chatbot implementation
+├── gradio_native_mcp.py       # Native Gradio MCP implementation
+├── meta_analysis_gradio.R     # Pure R implementation
+├── api_server.py              # FastAPI server with typed endpoints
+├── app.py                     # Core UI builder
+├── server.py                  # Python MCP server
+├── scripts/                   # R statistical scripts
+│   ├── entry/                 # Entry points for R tools
+│   │   └── mcp_tools.R        # Main R dispatcher
+│   ├── tools/                 # Individual tool implementations
+│   │   ├── assess_publication_bias.R
+│   │   ├── generate_forest_plot.R
+│   │   ├── generate_report.R
+│   │   ├── get_session_status.R
+│   │   ├── perform_analysis.R
+│   │   └── upload_data.R
+│   ├── adapters/              # Package adapters
+│   │   ├── cochrane_guidance.R
+│   │   └── meta_adapter.R
+│   └── utils/                 # Utility functions
+├── templates/                 # Report templates
+│   └── report_template.Rmd    # R Markdown template
+├── requirements-chatbot.txt   # Python dependencies
+├── requirements-poc.txt       # Minimal dependencies
+├── Dockerfile.chatbot         # Chatbot Docker configuration
+├── Dockerfile.poc             # Minimal Docker configuration
+├── setup_repository.sh        # Setup script
+└── README.md                  # Main documentation
+```
+
+### Key Files
+
+- **chatbot_langchain.py**: Main entry point for LangChain-enhanced chatbot
+- **scripts/entry/mcp_tools.R**: Main entry point for R statistical tools
+- **scripts/tools/**: Individual meta-analysis functions
+- **scripts/adapters/meta_adapter.R**: Adapter for R meta-analysis packages
+
+## Development Workflow
+
+### Adding New Features
+
+1. **New UI Feature**:
+   - Modify the appropriate Python file (chatbot_langchain.py, gradio_native_mcp.py)
+   - Update UI components in app.py if needed
+
+2. **New Statistical Feature**:
+   - Add R script in scripts/tools/
+   - Register in scripts/entry/mcp_tools.R
+   - Add Python wrapper in api_server.py
+   - Update LLM tools in chatbot implementations
+
+### Testing
+
+- **R Scripts**: Use scripts/utils/test_scripts.R
+- **Python Code**: Run individual implementations directly
+- **End-to-End**: Test through web UI
+
+### Code Style
+
+- **Python**: Follow PEP 8
+- **R**: Follow tidyverse style guide
+- **Documentation**: Update README.md and inline comments
+
+### Deployment
+
+1. **Local**: Run Python script directly
+2. **Docker**: Build and run container
+3. **Hugging Face Spaces**:
+   - Fork repository
+   - Create new Space (Docker SDK)
+   - Add API key as secret
+   - Connect GitHub repository
+
+## Key Concepts
+
+### Meta-Analysis Terminology
+
+- **Effect Size**: Standardized measure of study results (OR, RR, MD, etc.)
+- **Fixed Effects Model**: Assumes one true effect size across studies
+- **Random Effects Model**: Accounts for heterogeneity between studies
+- **Heterogeneity**: Variability between study results (I², Q-test, τ²)
+- **Publication Bias**: Systematic bias due to publication patterns
+- **Forest Plot**: Visualization of effect sizes and confidence intervals
+
+### Architecture Patterns
+
+- **MCP (Machine-Client Protocol)**: Gradio's pattern for tool orchestration
+- **Adapter Pattern**: Used to abstract R package differences
+- **Factory Pattern**: Used in R script dispatcher
+- **Strategy Pattern**: Different implementations (LangChain, basic, native)
+
+### Session Management
+
+Sessions are stored in the file system with this structure:
+```
+sessions/
+└── {session_id}/
+    ├── session.json       # Session configuration
+    ├── data/              # Raw uploaded data
+    ├── processing/        # Intermediate results
+    └── results/           # Final analysis outputs
+```
+
+## Common Tasks
+
+### 1. Conducting a Meta-Analysis
+
+The typical workflow:
+1. Initialize a meta-analysis session
+2. Upload study data
+3. Perform analysis with desired parameters
+4. Generate visualizations (forest plot)
+5. Assess publication bias
+6. Generate final report
+
+### 2. Adding a New Statistical Method
+
+```
+# 1. Create R script in scripts/tools/
+# Example: scripts/tools/new_analysis.R
+
+new_analysis_function <- function(args) {
+  # Implementation
+  list(status = "success", results = results)
+}
+
+# 2. Register in scripts/entry/mcp_tools.R
+else if (tool_name == "new_analysis") {
+  new_analysis(json_args)
+}
+
+# 3. Add Python wrapper in api_server.py
+class NewAnalysisRequest(BaseModel):
+  session_id: str
+  # Additional parameters
+
+@app.post("/api/new_analysis")
+def new_analysis(req: NewAnalysisRequest):
+  result = call_tool("new_analysis", req.model_dump())
+  return JSONResponse(content={"status": "ok", "result": result})
+```
+
+### 3. Modifying the User Interface
+
+To add a new UI element:
+
+```python
+# In app.py or appropriate implementation file
+with gr.Blocks() as demo:
+    with gr.Tab("New Feature"):
+        gr.Markdown("# New Feature")
+        input = gr.Textbox(label="Input")
+        output = gr.Textbox(label="Output")
+        button = gr.Button("Process")
+        button.click(fn=process_function, inputs=input, outputs=output)
+```
+
+### 4. Extending the Chatbot's Capabilities
+
+To add new tools to the LangChain chatbot:
+
+```python
+# In chatbot_langchain.py
+class NewToolInput(BaseModel):
+    session_id: str
+    parameter: str
+
+# Add to tool_configs
+{
+    "name": "new_tool",
+    "description": "Description of the new tool",
+    "input_class": NewToolInput,
+    "method": mcp_server.new_tool
+}
+```
+
+## Troubleshooting
+
+### Common Issues
+
+#### "Error: R script error"
+- **Cause**: R package missing or script error
+- **Solution**: Install required R packages, check R script for errors
+
+#### "No API key found"
+- **Cause**: LLM API key not set
+- **Solution**: Set OPENAI_API_KEY or ANTHROPIC_API_KEY environment variable
+
+#### "Session not found"
+- **Cause**: Invalid session ID or missing session data
+- **Solution**: Initialize a new session or check session directory
+
+#### "Error uploading data"
+- **Cause**: Incorrect data format or missing required columns
+- **Solution**: Ensure data follows required format with study_id, effect_size, and se columns
+
+### Debugging
+
+1. **R Scripts**:
+   - Add `print()` statements in R scripts
+   - Check R error messages in Python console
+   - Run scripts directly in R for isolated testing
+
+2. **Python Code**:
+   - Use Python debugger (pdb)
+   - Check logs for error messages
+   - Test MCP tools directly without UI
+
+3. **LLM Integration**:
+   - Check API key validity
+   - Verify prompt formats
+   - Test with simplified prompts
+
+## References
+
+### Documentation
+
+- [Gradio Documentation](https://gradio.app/docs/)
+- [R 'meta' Package](https://cran.r-project.org/web/packages/meta/meta.pdf)
+- [R 'metafor' Package](https://cran.r-project.org/web/packages/metafor/metafor.pdf)
+- [LangChain Documentation](https://langchain.com/docs/)
+- [Hugging Face Spaces](https://huggingface.co/docs/hub/spaces)
+
+### Meta-Analysis Resources
+
+- [Cochrane Handbook for Systematic Reviews](https://training.cochrane.org/handbook)
+- [PRISMA Guidelines](http://www.prisma-statement.org/)
+- [GRADE Approach](https://gradeworkinggroup.org/)
+
+### Project-Specific Resources
+
+- Main README.md
+- README_CHATBOT.md - Chatbot-specific documentation
+- README_NATIVE.md - Native Gradio MCP implementation details
+- README_R_NATIVE.md - Pure R implementation details

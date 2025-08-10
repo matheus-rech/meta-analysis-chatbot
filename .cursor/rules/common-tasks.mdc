@@ -1,0 +1,294 @@
+---
+description: Step-by-step guides for common development tasks in the Meta-Analysis Chatbot
+---
+# Common Development Tasks
+
+## Adding a New Statistical Method
+
+### Step 1: Create R Implementation
+```r
+# scripts/tools/network_meta_analysis.R
+network_meta_analysis <- function(args) {
+  session_path <- args$session_path
+  
+  tryCatch({
+    # Load data
+    data <- read.csv(file.path(session_path, "data", "uploaded_data.csv"))
+    
+    # Perform network meta-analysis
+    library(netmeta)
+    result <- netmeta(TE, seTE, treat1, treat2, studlab, data = data)
+    
+    # Save results
+    saveRDS(result, file.path(session_path, "results", "network_meta.rds"))
+    
+    list(
+      status = "success",
+      summary = summary(result),
+      ranking = netrank(result)
+    )
+  }, error = function(e) {
+    list(status = "error", message = e$message)
+  })
+}
+```
+
+### Step 2: Register in Dispatcher
+```r
+# scripts/entry/mcp_tools.R
+else if (tool_name == "network_meta_analysis") {
+  source(file.path(script_dir, "../tools/network_meta_analysis.R"))
+  network_meta_analysis(json_args)
+}
+```
+
+### Step 3: Add to Python Server
+```python
+# server.py
+TOOLS["network_meta_analysis"] = {
+    "description": "Perform network meta-analysis",
+    "inputSchema": {
+        "type": "object",
+        "properties": {
+            "session_id": {"type": "string"},
+            "reference_treatment": {"type": "string"}
+        },
+        "required": ["session_id"]
+    }
+}
+```
+
+### Step 4: Add to Chatbot
+```python
+# chatbot_langchain.py
+class NetworkMetaAnalysisInput(BaseModel):
+    session_id: str
+    reference_treatment: Optional[str] = None
+
+tool_configs.append({
+    "name": "network_meta_analysis",
+    "description": "Perform network meta-analysis for multiple treatment comparisons",
+    "input_class": NetworkMetaAnalysisInput,
+    "method": mcp_server.network_meta_analysis
+})
+```
+
+## Modifying Data Upload Validation
+
+### Update R Validation Logic:
+```r
+# scripts/tools/upload_data.R
+validate_network_data <- function(data) {
+  required <- c("study", "treatment1", "treatment2", "effect", "se")
+  missing <- setdiff(required, names(data))
+  
+  if (length(missing) > 0) {
+    return(list(
+      valid = FALSE,
+      message = paste("Missing columns:", paste(missing, collapse = ", "))
+    ))
+  }
+  
+  # Check for network connectivity
+  treatments <- unique(c(data$treatment1, data$treatment2))
+  if (length(treatments) < 3) {
+    return(list(
+      valid = FALSE,
+      message = "Network meta-analysis requires at least 3 treatments"
+    ))
+  }
+  
+  list(valid = TRUE)
+}
+```
+
+## Adding Custom Visualization
+
+### Step 1: Create R Plotting Function
+```r
+# scripts/tools/generate_network_plot.R
+generate_network_plot <- function(args) {
+  session_path <- args$session_path
+  
+  # Load results
+  result <- readRDS(file.path(session_path, "results", "network_meta.rds"))
+  
+  # Create plot
+  plot_file <- file.path(session_path, "results", "network_plot.png")
+  png(plot_file, width = 800, height = 600)
+  netgraph(result, 
+           col = "darkblue",
+           thickness = "se.fixed",
+           multiarm = TRUE)
+  dev.off()
+  
+  list(
+    status = "success",
+    plot_file = basename(plot_file),
+    network_plot_path = file.path("results", basename(plot_file))
+  )
+}
+```
+
+### Step 2: Update Gradio UI
+```python
+# gradio_native_mcp.py
+def display_network_plot(session_id):
+    result = mcp_server.generate_network_plot({"session_id": session_id})
+    
+    if result["status"] == "success":
+        plot_path = Path(sessions[session_id]["path"]) / result["network_plot_path"]
+        return str(plot_path)
+    return None
+
+# Add to UI
+network_plot_btn = gr.Button("Generate Network Plot")
+network_plot_output = gr.Image(label="Network Plot")
+network_plot_btn.click(
+    fn=display_network_plot,
+    inputs=[session_state],
+    outputs=[network_plot_output]
+)
+```
+
+## Implementing Batch Processing
+
+### Create Batch Handler:
+```python
+# batch_processor.py
+class BatchProcessor:
+    def __init__(self, mcp_server):
+        self.mcp_server = mcp_server
+        self.results = []
+    
+    def process_batch(self, csv_files: List[Path], common_params: dict):
+        """Process multiple CSV files with same analysis parameters"""
+        
+        for csv_file in csv_files:
+            # Initialize session
+            init_result = self.mcp_server.initialize_meta_analysis({
+                "name": f"Batch - {csv_file.stem}",
+                **common_params
+            })
+            
+            session_id = init_result["session_id"]
+            
+            # Upload data
+            with open(csv_file, 'rb') as f:
+                data_content = base64.b64encode(f.read()).decode()
+            
+            upload_result = self.mcp_server.upload_study_data({
+                "session_id": session_id,
+                "data_content": data_content
+            })
+            
+            # Perform analysis
+            if upload_result["status"] == "success":
+                analysis_result = self.mcp_server.perform_meta_analysis({
+                    "session_id": session_id
+                })
+                
+                self.results.append({
+                    "file": csv_file.name,
+                    "session_id": session_id,
+                    "result": analysis_result
+                })
+        
+        return self.results
+```
+
+## Debugging R Script Failures
+
+### Step 1: Enable Verbose Logging
+```r
+# Add to scripts/entry/mcp_tools.R
+if (Sys.getenv("DEBUG_R") == "1") {
+  # Log all inputs
+  cat("Tool:", tool_name, "\n", file = stderr())
+  cat("Args:", toJSON(json_args), "\n", file = stderr())
+  cat("Session:", session_path, "\n", file = stderr())
+  
+  # Enable traceback
+  options(error = function() {
+    traceback(2)
+    quit(status = 1)
+  })
+}
+```
+
+### Step 2: Test R Script Directly
+```bash
+# Test with minimal input
+echo '{"session_id":"test123"}' > /tmp/test_args.json
+Rscript scripts/entry/mcp_tools.R perform_meta_analysis /tmp/test_args.json /tmp/test_session
+
+# Check R package loading
+Rscript -e "library(meta); library(metafor); sessionInfo()"
+```
+
+### Step 3: Add Checkpoints
+```r
+# Add progress indicators
+checkpoint <- function(msg) {
+  if (Sys.getenv("DEBUG_R") == "1") {
+    cat("[CHECKPOINT]", msg, "\n", file = stderr())
+  }
+}
+
+perform_meta_analysis <- function(args) {
+  checkpoint("Starting analysis")
+  
+  # Load data
+  checkpoint("Loading data")
+  data <- read.csv(...)
+  
+  checkpoint(paste("Data loaded:", nrow(data), "studies"))
+  
+  # Run analysis
+  checkpoint("Running meta-analysis")
+  result <- metagen(...)
+  
+  checkpoint("Analysis complete")
+  # ...
+}
+```
+
+## Optimizing Performance
+
+### Implement Caching:
+```python
+# server.py
+import hashlib
+import pickle
+
+class CachedMCPServer(MCPServer):
+    def __init__(self):
+        super().__init__()
+        self.cache_dir = Path("cache")
+        self.cache_dir.mkdir(exist_ok=True)
+    
+    def get_cache_key(self, tool_name: str, args: dict) -> str:
+        """Generate cache key from tool and arguments"""
+        key_str = f"{tool_name}:{json.dumps(args, sort_keys=True)}"
+        return hashlib.md5(key_str.encode()).hexdigest()
+    
+    def execute_r(self, tool: str, args: dict, session_path: str = None):
+        # Check cache for read-only operations
+        if tool in ["generate_forest_plot", "assess_publication_bias"]:
+            cache_key = self.get_cache_key(tool, args)
+            cache_file = self.cache_dir / f"{cache_key}.pkl"
+            
+            if cache_file.exists():
+                with open(cache_file, 'rb') as f:
+                    return pickle.load(f)
+        
+        # Execute normally
+        result = super().execute_r(tool, args, session_path)
+        
+        # Cache result
+        if tool in ["generate_forest_plot", "assess_publication_bias"]:
+            with open(cache_file, 'wb') as f:
+                pickle.dump(result, f)
+        
+        return result
+```

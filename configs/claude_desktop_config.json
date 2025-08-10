@@ -1,0 +1,57 @@
+{
+  "mcpServers": {
+    "meta-analysis": {
+      "command": "python",
+      "args": [
+        "__SERVER_PATH__/server.py"
+      ],
+      "env": {
+        "RSCRIPT_BIN": "Rscript",
+        "RSCRIPT_TIMEOUT_SEC": "300",
+        "DEBUG_R": "0",
+        "SESSIONS_DIR": "__SESSIONS_PATH__",
+        "PYTHONUNBUFFERED": "1"
+      },
+      "description": "Meta-Analysis Statistical Tools via R",
+      "capabilities": {
+        "tools": true,
+        "resources": false,
+        "prompts": false
+      }
+    },
+    "meta-analysis-gradio": {
+      "command": "python",
+      "args": [
+        "__SERVER_PATH__/gradio_native_mcp.py"
+      ],
+      "env": {
+        "GRADIO_MCP_SERVER": "True",
+        "RSCRIPT_TIMEOUT_SEC": "300",
+        "SESSIONS_DIR": "__SESSIONS_PATH__"
+      },
+      "description": "Meta-Analysis with Gradio UI",
+      "capabilities": {
+        "tools": true,
+        "resources": false,
+        "prompts": false
+      }
+    }
+  },
+  "instructions": {
+    "setup": [
+      "1. Replace __SERVER_PATH__ with the absolute path to your meta-analysis-chatbot directory",
+      "2. Replace __SESSIONS_PATH__ with your desired sessions directory path",
+      "3. Copy this configuration to Claude Desktop's config location:",
+      "   - macOS: ~/Library/Application Support/Claude/claude_desktop_config.json",
+      "   - Windows: %APPDATA%/Claude/claude_desktop_config.json",
+      "   - Linux: ~/.config/Claude/claude_desktop_config.json",
+      "4. Restart Claude Desktop",
+      "5. Test by asking: 'What meta-analysis tools are available?'"
+    ],
+    "requirements": [
+      "Python 3.8+",
+      "R 4.0+ with packages: meta, metafor, jsonlite, ggplot2",
+      "Python packages: see requirements-chatbot.txt"
+    ]
+  }
+}

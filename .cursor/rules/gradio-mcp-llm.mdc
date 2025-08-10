@@ -1,0 +1,534 @@
+---
+description: Guidelines for leveraging Gradio's MCP server capabilities and LLM integration in unified interfaces
+---
+# Gradio MCP & LLM Integration Guide
+
+## Overview
+
+Gradio 5.0+ provides powerful capabilities to serve as both an MCP (Model Context Protocol) server and a traditional web API, while seamlessly integrating LLMs within the same interface. This creates a unified platform where human users and AI agents can interact with the same tools.
+
+## Core Capabilities
+
+### 1. Gradio as MCP Server
+
+Gradio can expose any function as an MCP tool accessible to LLMs:
+
+```python
+import gradio as gr
+
+def analyze_data(data: str, method: str = "auto") -> dict:
+    """Analyze data using specified method.
+    
+    Args:
+        data: Input data as CSV string
+        method: Analysis method (auto, manual, advanced)
+    
+    Returns:
+        Analysis results as dictionary
+    """
+    # Your implementation
+    return {"result": "analysis"}
+
+demo = gr.Interface(
+    fn=analyze_data,
+    inputs=[gr.Textbox(label="Data"), gr.Dropdown(["auto", "manual", "advanced"])],
+    outputs=gr.JSON(label="Results")
+)
+
+# Enable MCP server - makes function available to LLMs
+demo.launch(mcp_server=True)
+```
+
+### 2. Multiple Server Modes
+
+Gradio can operate in three modes simultaneously:
+
+#### Standard Web Interface
+```python
+demo.launch()  # Regular web UI at http://localhost:7860
+```
+
+#### MCP Server (SSE Transport)
+```python
+demo.launch(mcp_server=True)
+# MCP endpoint: http://localhost:7860/gradio_api/mcp/sse
+```
+
+#### API Server
+```python
+demo.launch(api_open=True)
+# API docs: http://localhost:7860/docs
+# API endpoint: http://localhost:7860/api/predict
+```
+
+### 3. FastAPI Integration
+
+Mount Gradio within FastAPI for advanced API control:
+
+```python
+from fastapi import FastAPI
+import gradio as gr
+
+app = FastAPI(title="Meta-Analysis API")
+
+# Create Gradio interface
+demo = gr.Interface(fn=your_function, inputs=..., outputs=...)
+
+# Mount Gradio app
+app = gr.mount_gradio_app(app, demo, path="/")
+
+# Add custom API endpoints
+@app.get("/api/health")
+def health():
+    return {"status": "healthy"}
+
+@app.post("/api/custom")
+def custom_endpoint(data: dict):
+    return {"result": process(data)}
+
+# Optional: Add FastMCP for typed MCP tools
+try:
+    from fastmcp import FastMCP
+    
+    fmcp = FastMCP()
+    
+    @fmcp.tool("analyze")
+    def mcp_analyze(data: str, method: str = "auto"):
+        """MCP tool for analysis"""
+        return your_function(data, method)
+    
+    # Mount FastMCP at /mcp
+    app.mount("/mcp", fmcp.app)
+except ImportError:
+    pass
+```
+
+## LLM Integration Patterns
+
+### 1. Chatbot with Tool Orchestration
+
+Implement [MetaAnalysisChatbot](mdc:gradio_native_mcp.py) pattern:
+
+```python
+class MetaAnalysisChatbot:
+    def __init__(self, mcp_server):
+        self.mcp_server = mcp_server
+        self.llm = self._initialize_llm()
+    
+    def process_message(self, message: str, history: List[ChatMessage]):
+        # Parse user intent
+        intent = self.llm.analyze_intent(message)
+        
+        # Execute appropriate MCP tools
+        if intent.requires_tool:
+            tool_result = self.mcp_server.call_tool(
+                intent.tool_name,
+                intent.parameters
+            )
+            
+            # Generate response with tool results
+            response = self.llm.generate_response(
+                message, 
+                tool_result,
+                context=history
+            )
+        else:
+            # Direct LLM response
+            response = self.llm.generate_response(message)
+        
+        return ChatMessage(role="assistant", content=response)
+```
+
+### 2. Multi-Tab Interface
+
+Organize functionality across tabs for different user types:
+
+```python
+def create_gradio_app():
+    with gr.Blocks(title="Meta-Analysis Platform") as app:
+        
+        # Tab 1: AI Assistant for natural language
+        with gr.Tab("AI Assistant"):
+            chatbot = gr.Chatbot(type="messages")
+            msg = gr.Textbox(label="Ask about meta-analysis...")
+            msg.submit(process_chat, [msg, chatbot], [msg, chatbot])
+        
+        # Tab 2: Direct Tools for power users
+        with gr.Tab("Direct Tools"):
+            with gr.Row():
+                tool_dropdown = gr.Dropdown(
+                    choices=list(mcp_server.tools.keys()),
+                    label="Select Tool"
+                )
+                params = gr.JSON(label="Parameters")
+            result = gr.JSON(label="Result")
+            gr.Button("Execute").click(
+                mcp_server.execute_tool,
+                [tool_dropdown, params],
+                result
+            )
+        
+        # Tab 3: File Upload with preview
+        with gr.Tab("Data Upload"):
+            file = gr.File(label="Upload CSV")
+            preview = gr.Dataframe(label="Preview")
+            file.change(preview_data, file, preview)
+    
+    return app
+```
+
+### 3. Streaming Responses
+
+Enable streaming for real-time LLM responses:
+
+```python
+def stream_response(message: str, history):
+    # Stream from LLM
+    for chunk in llm.stream_generate(message):
+        yield chunk
+        
+# In Gradio interface
+gr.ChatInterface(
+    fn=stream_response,
+    type="messages",
+    # Enable streaming
+    stream=True
+)
+```
+
+## File Handling
+
+### Native File Upload Pattern
+
+Use Gradio's native file handling instead of base64 encoding:
+
+```python
+def upload_data(file: gr.File, session_id: str) -> dict:
+    """Handle file upload with native Gradio patterns"""
+    
+    # Gradio provides file path directly
+    if file is None:
+        return {"error": "No file provided"}
+    
+    # Read file based on type
+    import pandas as pd
+    if file.name.endswith('.csv'):
+        df = pd.read_csv(file.name)
+    elif file.name.endswith('.xlsx'):
+        df = pd.read_excel(file.name)
+    else:
+        return {"error": "Unsupported file type"}
+    
+    # Process with MCP server
+    result = mcp_server.upload_study_data(
+        session_id=session_id,
+        data=df,
+        validation_level="comprehensive"
+    )
+    
+    return result
+
+# In interface
+gr.Interface(
+    fn=upload_data,
+    inputs=[
+        gr.File(label="Data File", file_types=[".csv", ".xlsx"]),
+        gr.Textbox(label="Session ID")
+    ],
+    outputs=gr.JSON()
+)
+```
+
+## MCP Client Configuration
+
+### For Cursor (SSE Transport)
+
+```json
+{
+  "mcpServers": {
+    "gradio-app": {
+      "url": "http://localhost:7860/gradio_api/mcp/sse",
+      "description": "Gradio MCP Server via SSE"
+    }
+  }
+}
+```
+
+### For Claude Desktop (stdio Transport)
+
+Since Claude Desktop uses stdio, use the separate [server.py](mdc:server.py):
+
+```json
+{
+  "mcpServers": {
+    "meta-analysis": {
+      "command": "python",
+      "args": ["/path/to/server.py"]
+    }
+  }
+}
+```
+
+### Bridge for Non-SSE Clients
+
+Use `mcp-remote` for clients that don't support SSE:
+
+```bash
+npm install -g mcp-remote
+mcp-remote http://localhost:7860/gradio_api/mcp/sse
+```
+
+## Best Practices
+
+### 1. Docstring Requirements
+
+Always include comprehensive docstrings for MCP discovery:
+
+```python
+def analyze_meta(
+    studies: List[dict],
+    model: str = "random",
+    measure: str = "OR"
+) -> dict:
+    """Perform meta-analysis on clinical studies.
+    
+    Analyzes multiple studies to calculate combined effect sizes
+    and assess heterogeneity using specified statistical model.
+    
+    Args:
+        studies: List of study data dictionaries with keys:
+            - study_id: Unique identifier
+            - effect_size: Observed effect
+            - sample_size: Number of participants
+        model: Statistical model ('fixed' or 'random')
+        measure: Effect measure type ('OR', 'RR', 'MD', 'SMD')
+    
+    Returns:
+        Dictionary containing:
+            - overall_effect: Combined effect size
+            - confidence_interval: 95% CI
+            - heterogeneity: I-squared statistic
+            - forest_plot: Base64 encoded plot
+    
+    Raises:
+        ValueError: If studies list is empty or malformed
+        RuntimeError: If statistical analysis fails
+    """
+    # Implementation
+```
+
+### 2. Error Handling
+
+Implement robust error handling for MCP tools:
+
+```python
+def mcp_tool_wrapper(tool_func):
+    """Wrapper for consistent MCP error responses"""
+    def wrapper(*args, **kwargs):
+        try:
+            result = tool_func(*args, **kwargs)
+            return {
+                "status": "success",
+                "result": result
+            }
+        except ValueError as e:
+            return {
+                "status": "error",
+                "error_type": "validation",
+                "message": str(e)
+            }
+        except Exception as e:
+            return {
+                "status": "error",
+                "error_type": "execution",
+                "message": "Tool execution failed",
+                "details": str(e) if DEBUG else None
+            }
+    return wrapper
+```
+
+### 3. Session Management
+
+Implement proper session handling for stateful operations:
+
+```python
+class SessionManager:
+    def __init__(self):
+        self.sessions = {}
+    
+    def create_session(self, config: dict) -> str:
+        session_id = str(uuid.uuid4())
+        session_path = Path(f"sessions/{session_id}")
+        session_path.mkdir(parents=True, exist_ok=True)
+        
+        self.sessions[session_id] = {
+            "path": session_path,
+            "config": config,
+            "created": datetime.now(),
+            "state": "initialized"
+        }
+        
+        return session_id
+    
+    def get_session(self, session_id: str) -> dict:
+        if session_id not in self.sessions:
+            raise ValueError(f"Session {session_id} not found")
+        return self.sessions[session_id]
+```
+
+### 4. Deployment Considerations
+
+#### For Hugging Face Spaces
+
+```python
+# Detect HF Spaces environment
+import os
+
+if os.getenv("SPACE_ID"):
+    # Running on Hugging Face Spaces
+    demo.launch(
+        server_name="0.0.0.0",
+        server_port=7860,
+        mcp_server=True,
+        # Share link for external MCP access
+        share=True
+    )
+else:
+    # Local development
+    demo.launch(mcp_server=True)
+```
+
+#### Environment Variables
+
+```python
+# Support configuration via environment
+MCP_ENABLED = os.getenv("GRADIO_MCP_SERVER", "False").lower() == "true"
+API_KEY = os.getenv("OPENAI_API_KEY") or os.getenv("ANTHROPIC_API_KEY")
+DEBUG = os.getenv("DEBUG", "0") == "1"
+
+demo.launch(
+    mcp_server=MCP_ENABLED,
+    debug=DEBUG
+)
+```
+
+## Testing MCP Functionality
+
+### Manual Testing
+
+```bash
+# Test SSE endpoint
+curl -N http://localhost:7860/gradio_api/mcp/sse
+
+# Test API endpoint
+curl -X POST http://localhost:7860/api/predict \
+  -H "Content-Type: application/json" \
+  -d '{"data": ["test input"]}'
+```
+
+### Automated Testing
+
+```python
+def test_mcp_server():
+    """Test MCP server functionality"""
+    import requests
+    import json
+    
+    # Start Gradio app in test mode
+    app = create_gradio_app()
+    with app.launch(prevent_thread_lock=True) as demo:
+        # Test SSE endpoint
+        response = requests.get(
+            f"http://localhost:{demo.server_port}/gradio_api/mcp/sse",
+            stream=True,
+            timeout=5
+        )
+        assert response.status_code == 200
+        
+        # Test tool execution
+        response = requests.post(
+            f"http://localhost:{demo.server_port}/api/predict",
+            json={"data": ["test", "auto"]}
+        )
+        assert response.status_code == 200
+        result = response.json()
+        assert "data" in result
+```
+
+## Common Patterns
+
+### 1. Tool Discovery Endpoint
+
+```python
+@app.get("/api/tools")
+def list_tools():
+    """List all available MCP tools"""
+    return {
+        "tools": [
+            {
+                "name": name,
+                "description": func.__doc__,
+                "parameters": inspect.signature(func).parameters
+            }
+            for name, func in mcp_server.tools.items()
+        ]
+    }
+```
+
+### 2. Batch Processing
+
+```python
+def batch_process(files: List[gr.File], params: dict):
+    """Process multiple files with same parameters"""
+    results = []
+    for file in files:
+        session_id = mcp_server.initialize_session(
+            name=f"Batch_{file.name}"
+        )
+        
+        # Upload and process
+        upload_result = mcp_server.upload_data(
+            file=file,
+            session_id=session_id
+        )
+        
+        if upload_result["status"] == "success":
+            analysis = mcp_server.analyze(
+                session_id=session_id,
+                **params
+            )
+            results.append(analysis)
+    
+    return results
+```
+
+### 3. Progress Tracking
+
+```python
+def long_running_task(data, progress=gr.Progress()):
+    """Task with progress updates"""
+    progress(0, desc="Initializing...")
+    
+    # Step 1
+    progress(0.3, desc="Processing data...")
+    processed = process_data(data)
+    
+    # Step 2
+    progress(0.6, desc="Running analysis...")
+    result = run_analysis(processed)
+    
+    # Step 3
+    progress(0.9, desc="Generating report...")
+    report = generate_report(result)
+    
+    progress(1.0, desc="Complete!")
+    return report
+```
+
+## References
+
+- [Building MCP Server with Gradio](https://www.gradio.app/guides/building-mcp-server-with-gradio)
+- [Building MCP Client with Gradio](https://www.gradio.app/guides/building-an-mcp-client-with-gradio)
+- [Gradio MCP Blog Post](https://huggingface.co/blog/gradio-mcp)
+- [File Upload MCP Guide](https://www.gradio.app/guides/file-upload-mcp)
+- [FastMCP Documentation](https://github.com/anthropics/fastmcp)

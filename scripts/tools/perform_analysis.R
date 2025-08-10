@@ -18,6 +18,21 @@ if (is.null(script_dir)) {
 
 source(file.path(script_dir, "../adapters", "meta_adapter.R"))
 
+# Helper function to normalize field names
+normalize_field_names <- function(config) {
+  # Normalize from camelCase to snake_case
+  if (!is.null(config$effectMeasure) && is.null(config$effect_measure)) {
+    config$effect_measure <- config$effectMeasure
+  }
+  if (!is.null(config$analysisModel) && is.null(config$analysis_model)) {
+    config$analysis_model <- config$analysisModel
+  }
+  if (!is.null(config$studyType) && is.null(config$study_type)) {
+    config$study_type <- config$studyType
+  }
+  config
+}
+
 perform_meta_analysis <- function(args) {
   session_path <- args$session_path
   

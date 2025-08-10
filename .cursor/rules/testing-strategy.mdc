@@ -1,0 +1,224 @@
+---
+description: Testing strategies and patterns for the Meta-Analysis Chatbot
+---
+# Testing Strategy Guide
+
+## Test Coverage Requirements
+
+### Critical Paths to Test:
+1. **Session Initialization** → Data Upload → Analysis → Report Generation
+2. **Large Data Handling** (>100KB CSV files)
+3. **Timeout Scenarios** (long-running R analyses)
+4. **Error Recovery** (invalid data, R package errors)
+5. **Concurrent Sessions** (multiple users)
+
+## Python-R Bridge Testing
+
+### Test Large Payloads:
+```python
+def test_large_payload():
+    # Generate large CSV (>OS arg limit)
+    large_data = "study,effect,se\n"
+    for i in range(10000):
+        large_data += f"Study{i},0.{i%100},0.0{i%10+1}\n"
+    
+    # Should use temp file, not CLI args
+    result = execute_r("upload_study_data", {
+        "data_content": base64.b64encode(large_data.encode()).decode()
+    })
+    assert result["status"] == "success"
+```
+
+### Test Timeout Handling:
+```python
+def test_timeout():
+    with pytest.raises(subprocess.TimeoutExpired):
+        execute_r("long_running_tool", {}, timeout=1)
+```
+
+### Test Error Propagation:
+```python
+def test_r_error_handling():
+    # With debug mode
+    os.environ["DEBUG_R"] = "1"
+    result = execute_r("invalid_tool", {})
+    assert "traceback" in result  # Detailed error
+    
+    # Without debug mode
+    os.environ["DEBUG_R"] = "0"
+    result = execute_r("invalid_tool", {})
+    assert "traceback" not in result  # Sanitized error
+```
+
+## R Script Testing
+
+### Unit Test Pattern:
+```r
+# scripts/utils/test_scripts.R
+test_upload_data <- function() {
+  # Create test session
+  session_path <- tempfile("test_session")
+  dir.create(session_path, recursive = TRUE)
+  
+  # Test valid data
+  args <- list(
+    session_path = session_path,
+    data_content = base64enc::base64encode(charToRaw("study,effect,se\nS1,0.5,0.1"))
+  )
+  
+  result <- upload_study_data(args)
+  stopifnot(result$status == "success")
+  
+  # Test invalid data
+  args$data_content <- base64enc::base64encode(charToRaw("invalid"))
+  result <- upload_study_data(args)
+  stopifnot(result$status == "error")
+  
+  unlink(session_path, recursive = TRUE)
+}
+```
+
+### Integration Test Pattern:
+```r
+test_full_workflow <- function() {
+  # Initialize
+  init_result <- initialize_meta_analysis(list(
+    name = "Test",
+    effect_measure = "OR"
+  ))
+  
+  session_id <- init_result$session_id
+  
+  # Upload data
+  upload_result <- upload_study_data(list(
+    session_id = session_id,
+    data_content = test_data_base64
+  ))
+  
+  # Perform analysis
+  analysis_result <- perform_meta_analysis(list(
+    session_id = session_id
+  ))
+  
+  stopifnot(all(c(
+    init_result$status == "success",
+    upload_result$status == "success",
+    analysis_result$status == "success"
+  )))
+}
+```
+
+## MCP Client Testing
+
+### Claude Desktop Test:
+```bash
+# 1. Configure Claude Desktop
+cp configs/claude_desktop_config.json ~/Library/Application\ Support/Claude/
+
+# 2. Test via command line first
+echo '{"jsonrpc":"2.0","id":1,"method":"tools/list","params":{}}' | python server.py
+
+# 3. Restart Claude and test
+# Ask: "List available meta-analysis tools"
+```
+
+### Cursor Test (when SSE implemented):
+```python
+def test_sse_stream():
+    import sseclient
+    
+    # Start Gradio server
+    server = start_gradio_server()
+    
+    # Connect to SSE endpoint
+    response = requests.get(
+        "http://localhost:7860/gradio_api/mcp/sse",
+        stream=True
+    )
+    
+    client = sseclient.SSEClient(response)
+    
+    # Send tool request
+    for event in client.events():
+        data = json.loads(event.data)
+        assert "tools" in data
+```
+
+## Performance Testing
+
+### Load Testing Pattern:
+```python
+import concurrent.futures
+import time
+
+def test_concurrent_sessions():
+    def create_and_analyze(session_num):
+        start = time.time()
+        
+        # Initialize session
+        init_result = mcp_server.initialize_meta_analysis({
+            "name": f"Test {session_num}"
+        })
+        
+        # Upload and analyze
+        # ... 
+        
+        return time.time() - start
+    
+    with concurrent.futures.ThreadPoolExecutor(max_workers=10) as executor:
+        futures = [executor.submit(create_and_analyze, i) for i in range(10)]
+        times = [f.result() for f in futures]
+    
+    assert max(times) < 60  # All complete within 1 minute
+```
+
+## Continuous Integration
+
+### GitHub Actions Workflow:
+```yaml
+name: Test Meta-Analysis Chatbot
+
+on: [push, pull_request]
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    
+    steps:
+    - uses: actions/checkout@v2
+    
+    - name: Setup Python
+      uses: actions/setup-python@v2
+      with:
+        python-version: '3.9'
+    
+    - name: Setup R
+      uses: r-lib/actions/setup-r@v2
+      with:
+        r-version: '4.3'
+    
+    - name: Install dependencies
+      run: |
+        pip install -r requirements-chatbot.txt
+        Rscript scripts/utils/install_packages.R
+    
+    - name: Run Python tests
+      run: python test_subprocess_bridge.py
+    
+    - name: Run R tests
+      run: Rscript scripts/utils/test_scripts.R
+    
+    - name: Test MCP integration
+      run: python test_mcp_clients.py
+```
+
+## Debugging Checklist
+
+When tests fail:
+1. ✓ Check R packages installed: `Rscript -e "library(meta)"`
+2. ✓ Verify script paths: `ls -la scripts/entry/mcp_tools.R`
+3. ✓ Enable debug mode: `export DEBUG_R=1`
+4. ✓ Check session directories: `ls -la sessions/`
+5. ✓ Review R output: `Rscript scripts/entry/mcp_tools.R health_check '{}' /tmp`
+6. ✓ Monitor subprocess: `strace -f python server.py`
+7. ✓ Check JSON validity: `echo $JSON | python -m json.tool`

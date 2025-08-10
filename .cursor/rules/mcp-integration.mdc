@@ -1,0 +1,168 @@
+---
+description: Guidelines for MCP (Model Context Protocol) integration with Claude Desktop and Cursor
+---
+# MCP Integration Guidelines
+
+## MCP Server Implementation Status
+
+### ✅ Working Components:
+- **STDIO transport** for Claude Desktop ([server.py](mdc:server.py))
+- **JSON-RPC 2.0** protocol implementation
+- **Tool discovery** via `tools/list` method
+- **Tool execution** via `tools/call` method
+- **Session management** with file persistence
+
+### ⚠️ Gaps to Address:
+- Native Gradio MCP server (`mcp_server=True` not implemented)
+- SSE (Server-Sent Events) transport for Cursor
+- WebSocket transport support
+- Resource and prompt capabilities
+
+## Claude Desktop Integration
+
+### Configuration Location:
+- macOS: `~/Library/Application Support/Claude/claude_desktop_config.json`
+- Windows: `%APPDATA%\Claude\claude_desktop_config.json`
+- Linux: `~/.config/Claude/claude_desktop_config.json`
+
+### Configuration Template:
+```json
+{
+  "mcpServers": {
+    "meta-analysis": {
+      "command": "python",
+      "args": ["/path/to/server.py"],
+      "env": {
+        "RSCRIPT_BIN": "Rscript",
+        "RSCRIPT_TIMEOUT_SEC": "300",
+        "SESSIONS_DIR": "/path/to/sessions"
+      }
+    }
+  }
+}
+```
+
+### Testing Claude Desktop Integration:
+1. Install configuration file
+2. Restart Claude Desktop
+3. Look for "meta-analysis" in available tools
+4. Test with: "Initialize a meta-analysis for clinical trials"
+
+## Cursor Integration (Future)
+
+### Requirements:
+1. Implement SSE endpoint in Gradio app
+2. Add `/gradio_api/mcp/sse` route
+3. Support streaming responses
+4. Implement heartbeat for connection maintenance
+
+### Configuration Template:
+```json
+{
+  "mcpServers": {
+    "meta-analysis-sse": {
+      "url": "http://127.0.0.1:7860/gradio_api/mcp/sse",
+      "description": "Meta-Analysis MCP Server"
+    }
+  }
+}
+```
+
+## Adding New MCP Tools
+
+### 1. Create R implementation:
+```r
+# scripts/tools/new_tool.R
+new_tool <- function(args) {
+  list(status = "success", result = "data")
+}
+```
+
+### 2. Register in dispatcher:
+```r
+# scripts/entry/mcp_tools.R
+else if (tool_name == "new_tool") {
+  source(file.path(script_dir, "../tools/new_tool.R"))
+  new_tool(json_args)
+}
+```
+
+### 3. Add to Python server:
+```python
+# server.py
+TOOLS = {
+    "new_tool": {
+        "description": "Tool description",
+        "inputSchema": {
+            "type": "object",
+            "properties": {
+                "param": {"type": "string"}
+            },
+            "required": ["param"]
+        }
+    }
+}
+```
+
+### 4. Add to LangChain chatbot:
+```python
+# chatbot_langchain.py
+class NewToolInput(BaseModel):
+    param: str
+
+tool_configs.append({
+    "name": "new_tool",
+    "description": "Tool description",
+    "input_class": NewToolInput,
+    "method": mcp_server.new_tool
+})
+```
+
+## Testing MCP Functionality
+
+### Manual Testing with stdio:
+```bash
+# Test tools/list
+echo '{"jsonrpc":"2.0","id":1,"method":"tools/list","params":{}}' | python server.py
+
+# Test tool call
+echo '{"jsonrpc":"2.0","id":2,"method":"tools/call","params":{"name":"health_check","arguments":{}}}' | python server.py
+```
+
+### Automated Testing:
+```python
+# Use test_mcp_clients.py pattern
+class MCPServerTester:
+    def send_jsonrpc(self, method, params):
+        # Send request and parse response
+    
+    def test_tool(self):
+        response = self.send_jsonrpc("tools/call", {
+            "name": "tool_name",
+            "arguments": {}
+        })
+```
+
+## Debugging MCP Issues
+
+### Enable debug output:
+```bash
+export DEBUG_R=1
+export PYTHONUNBUFFERED=1
+```
+
+### Check R script execution:
+```bash
+Rscript scripts/entry/mcp_tools.R health_check '{}' /tmp/test_session
+```
+
+### Monitor server output:
+```bash
+python server.py 2>&1 | tee server.log
+```
+
+### Common Issues:
+1. **"Tool not found"**: Check TOOLS dictionary in server.py
+2. **"R script failed"**: Enable DEBUG_R and check R errors
+3. **Timeout errors**: Increase RSCRIPT_TIMEOUT_SEC
+4. **Path issues**: Verify scripts directory resolution

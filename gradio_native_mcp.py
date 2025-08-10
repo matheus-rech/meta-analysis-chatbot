@@ -39,7 +39,8 @@ class RIntegrationMCPServer:
     def __init__(self):
         self.sessions = {}
         self.current_session_id = None
-        self.scripts_path = Path(__file__).parent.parent.parent / "scripts"
+        # Resolve scripts path locally first, then Docker fallback
+        self.scripts_path = Path(__file__).parent / "scripts"
         self.mcp_tools_path = self.scripts_path / "entry" / "mcp_tools.R"
         
         # Verify R scripts exist
@@ -56,55 +57,59 @@ class RIntegrationMCPServer:
         """Execute R script tool maintaining compatibility with existing R backend"""
         
         # Prepare session path
-        session_path = args.get("session_id", "")
-        if session_path and session_path in self.sessions:
-            session_path = self.sessions[session_path]["path"]
+        sess_id = args.get("session_id", "")
+        if sess_id and sess_id in self.sessions:
+            session_path = self.sessions[sess_id]["path"]
         else:
             session_path = tempfile.mkdtemp(prefix="meta_analysis_")
         
-        # Prepare R script arguments
-        r_args = [
-            str(self.mcp_tools_path),
-            tool_name,
-            json.dumps(args),
-            session_path
-        ]
+        # Write args to a temp json file to avoid CLI arg-length limits
+        fd, args_file = tempfile.mkstemp(suffix=".json")
+        os.close(fd)
+        with open(args_file, "w", encoding="utf-8") as f:
+            json.dump(args, f)
+        
+        rscript = os.getenv("RSCRIPT_BIN", "Rscript")
+        timeout = int(os.getenv("RSCRIPT_TIMEOUT_SEC", "300"))
+        debug_r = os.getenv("DEBUG_R") == "1"
         
         try:
             # Execute R script
             result = subprocess.run(
-                ["Rscript", "--vanilla"] + r_args,
+                [rscript, "--vanilla", str(self.mcp_tools_path), tool_name, args_file, session_path],
                 capture_output=True,
                 text=True,
-                timeout=30
+                encoding="utf-8",
+                timeout=timeout
             )
-            
-            if result.returncode != 0:
-                return {
-                    "status": "error",
-                    "error": f"R script failed: {result.stderr}"
-                }
-            
-            # Parse JSON output from R
-            try:
-                output = json.loads(result.stdout.strip())
-                return output
-            except json.JSONDecodeError:
-                return {
-                    "status": "success",
-                    "output": result.stdout
-                }
-                
         except subprocess.TimeoutExpired:
-            return {
-                "status": "error",
-                "error": "R script execution timed out"
-            }
+            os.remove(args_file)
+            return {"status": "error", "error": "R script execution timed out"}
         except Exception as e:
-            return {
-                "status": "error",
-                "error": str(e)
-            }
+            os.remove(args_file)
+            return {"status": "error", "error": str(e)}
+        finally:
+            try:
+                if os.path.exists(args_file):
+                    os.remove(args_file)
+            except Exception:
+                pass
+        
+        if result.returncode != 0:
+            resp = {"status": "error", "error": "R script failed"}
+            if debug_r:
+                resp["stderr"] = (result.stderr or "").strip()
+                resp["stdout"] = (result.stdout or "").strip()
+            return resp
+        
+        # Parse JSON output from R
+        try:
+            return json.loads(result.stdout.strip())
+        except json.JSONDecodeError:
+            resp = {"status": "error", "error": "Invalid JSON from R", "raw_output": (result.stdout or "").strip()}
+            if debug_r:
+                resp["stderr"] = (result.stderr or "").strip()
+            return resp
     
     # MCP Tool Implementations (wrapping R scripts)
     
@@ -216,11 +221,15 @@ class RIntegrationMCPServer:
         })
         
         # If successful, try to load the image
-        if result.get("status") == "success" and result.get("plot_file"):
-            session_path = self.sessions[session_id]["path"]
-            plot_path = Path(session_path) / "results" / result["plot_file"]
-            if plot_path.exists():
-                result["plot_path"] = str(plot_path)
+        if result.get("status") == "success":
+            plot_path_str = result.get("forest_plot_path") or result.get("plot_file")
+            if plot_path_str:
+                session_path = self.sessions[session_id]["path"]
+                plot_path = Path(plot_path_str)
+                if not plot_path.is_absolute():
+                    plot_path = Path(session_path) / "results" / plot_path_str
+                if plot_path.exists():
+                    result["plot_path"] = str(plot_path)
         
         return result
     

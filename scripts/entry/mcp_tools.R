@@ -39,11 +39,19 @@ if (file.exists(cochrane_path)) {
 # Get CLI args
 args <- commandArgs(trailingOnly = TRUE)
 if (length(args) < 2) {
-  stop("Usage: mcp_tools.R <tool_name> <json_args> [session_path]")
+  stop("Usage: mcp_tools.R <tool_name> <json_args_or_file> [session_path]")
 }
 
 tool_name <- args[1]
-json_args <- fromJSON(args[2])
+# Allow passing a file path for large JSON payloads
+json_input <- args[2]
+if (file.exists(json_input)) {
+  json_text <- tryCatch(paste(readLines(json_input, warn = FALSE), collapse = "\n"), error = function(e) NULL)
+  if (is.null(json_text)) stop("Failed to read JSON args file: ", json_input)
+  json_args <- fromJSON(json_text)
+} else {
+  json_args <- fromJSON(json_input)
+}
 session_path <- if (length(args) >= 3) args[3] else getwd()
 
 # Ensure session_path is present in args for downstream helpers
@@ -58,9 +66,35 @@ error_response <- function(message, details = NULL) {
   respond(list(status = "error", message = message, details = details))
 }
 
+# Initialization tool (creates session.json and folders)
+initialize_meta_analysis <- function(args) {
+  session_path <- args$session_path
+  if (!dir.exists(session_path)) dir.create(session_path, recursive = TRUE)
+  for (d in c("data", "processing", "results", "input")) {
+    dir.create(file.path(session_path, d), showWarnings = FALSE, recursive = TRUE)
+  }
+  sess_id <- if (!is.null(args$session_id)) args$session_id else basename(session_path)
+  # Normalize fields from either snake_case or camelCase
+  study_type <- if (!is.null(args$study_type)) args$study_type else if (!is.null(args$studyType)) args$studyType else "clinical_trial"
+  effect_measure <- if (!is.null(args$effect_measure)) args$effect_measure else if (!is.null(args$effectMeasure)) args$effectMeasure else "OR"
+  analysis_model <- if (!is.null(args$analysis_model)) args$analysis_model else if (!is.null(args$analysisModel)) args$analysisModel else "random"
+  name <- if (!is.null(args$name)) args$name else "Meta-Analysis Project"
+  cfg <- list(
+    name = name,
+    studyType = study_type,
+    effectMeasure = effect_measure,
+    analysisModel = analysis_model,
+    createdAt = as.character(Sys.time())
+  )
+  writeLines(toJSON(cfg, auto_unbox = TRUE, pretty = TRUE), file.path(session_path, "session.json"))
+  list(status = "success", session_id = sess_id, session_path = session_path, config = cfg)
+}
+
 # Dispatcher
 result <- tryCatch({
-  if (tool_name == "upload_study_data") {
+  if (tool_name == "initialize_meta_analysis") {
+    initialize_meta_analysis(json_args)
+  } else if (tool_name == "upload_study_data") {
     # Base64-aware, size-guarded upload + processing
     upload_study_data(json_args)
   } else if (tool_name == "perform_meta_analysis") {

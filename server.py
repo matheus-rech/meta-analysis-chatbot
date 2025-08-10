@@ -4,14 +4,19 @@ import os
 import base64
 import tempfile
 import subprocess
+import uuid
 from typing import Any, Dict
 
 # Minimal MCP server in Python over stdio
 # It dispatches tool calls to the existing R scripts via Rscript mcp_tools.R
 
 _HERE = os.path.dirname(__file__)
-_PROJ = os.path.abspath(os.path.join(_HERE, '..', '..'))
-SCRIPTS_ENTRY = os.path.join('/app' if os.path.exists('/app/scripts') else _PROJ, 'scripts', 'entry', 'mcp_tools.R')
+_LOCAL_ENTRY = os.path.join(_HERE, 'scripts', 'entry', 'mcp_tools.R')
+_DOCKER_ENTRY = '/app/scripts/entry/mcp_tools.R'
+SCRIPTS_ENTRY = _LOCAL_ENTRY if os.path.exists(_LOCAL_ENTRY) else _DOCKER_ENTRY
+RSCRIPT_BIN = os.getenv('RSCRIPT_BIN', 'Rscript')
+DEFAULT_TIMEOUT = int(os.getenv('RSCRIPT_TIMEOUT_SEC', '300'))
+DEBUG_R = os.getenv('DEBUG_R') == '1'
 
 TOOLS = [
     'health_check',
@@ -25,30 +30,56 @@ TOOLS = [
 ]
 
 
-def execute_r(tool: str, args: Dict[str, Any], session_path: str = None, timeout: int = 30000) -> Dict[str, Any]:
-    r_args = [tool, json.dumps(args), session_path or os.getcwd()]
+def execute_r(tool: str, args: Dict[str, Any], session_path: str = None, timeout: int = DEFAULT_TIMEOUT) -> Dict[str, Any]:
+    session_dir = session_path or os.getcwd()
+    # Write JSON args to a temp file to avoid OS arg-length limits
+    args_file = None
+    try:
+        os.makedirs(os.path.join(session_dir, 'tmp'), exist_ok=True)
+        args_file = os.path.join(session_dir, 'tmp', f'args_{tool}.json')
+        with open(args_file, 'w', encoding='utf-8') as f:
+            json.dump(args, f)
+    except Exception:
+        fd, args_file = tempfile.mkstemp(suffix='.json')
+        os.close(fd)
+        with open(args_file, 'w', encoding='utf-8') as f:
+            json.dump(args, f)
+
     proc = subprocess.Popen(
-        ['Rscript', '--vanilla', SCRIPTS_ENTRY] + r_args,
+        [RSCRIPT_BIN, '--vanilla', SCRIPTS_ENTRY, tool, args_file, session_dir],
         stdin=subprocess.PIPE,
         stdout=subprocess.PIPE,
         stderr=subprocess.PIPE,
         text=True,
+        encoding='utf-8',
     )
     try:
         stdout, stderr = proc.communicate(timeout=timeout)
     except subprocess.TimeoutExpired:
         proc.kill()
-        raise RuntimeError('R script execution timed out')
+        return {'status': 'error', 'message': 'R script execution timed out'}
+    finally:
+        try:
+            if args_file and os.path.exists(args_file):
+                os.remove(args_file)
+        except Exception:
+            pass
 
     if proc.returncode != 0:
-        # Sanitize error output to avoid leaking sensitive information
-        sanitized_error = "R script failed to execute. Please check your input or contact support."
-        raise RuntimeError(sanitized_error)
+        # Keep details behind DEBUG_R to avoid leaking in prod
+        resp = {'status': 'error', 'message': 'R script failed to execute.'}
+        if DEBUG_R:
+            resp['stderr'] = (stderr or '').strip()
+            resp['stdout'] = (stdout or '').strip()
+        return resp
 
     try:
         return json.loads(stdout.strip())
     except Exception:
-        return {'output': stdout.strip(), 'stderr': (stderr or '').strip()}
+        resp = {'status': 'error', 'message': 'Invalid JSON from R', 'raw_output': (stdout or '').strip()}
+        if DEBUG_R:
+            resp['stderr'] = (stderr or '').strip()
+        return resp
 
 
 # Very small JSON-RPC 2.0 loop for MCP-like behavior
@@ -82,16 +113,27 @@ def call_tool_resp(request_id, name: str, arguments: Dict[str, Any]):
             'id': request_id,
             'error': {'code': -32601, 'message': f'Unknown tool: {name}'},
         }
-    # session_id is required for most tools; pass session dir if present
+    # Compute session dir
     session_id = arguments.get('session_id')
     session_path = None
-    if session_id:
-        sessions_dir = os.environ.get('SESSIONS_DIR', os.path.join(os.getcwd(), 'sessions'))
-        session_path = os.path.join(sessions_dir, session_id)
+    sessions_root = os.environ.get('SESSIONS_DIR', os.path.join(os.getcwd(), 'sessions'))
+    os.makedirs(sessions_root, exist_ok=True)
+    if name == 'initialize_meta_analysis' and not session_id:
+        session_id = uuid.uuid4().hex
+        session_path = os.path.join(sessions_root, session_id)
+        os.makedirs(session_path, exist_ok=True)
+        arguments['session_id'] = session_id  # Pass it to R
+    elif session_id:
+        session_path = os.path.join(sessions_root, session_id)
         os.makedirs(session_path, exist_ok=True)
 
     try:
         result = execute_r(name, arguments, session_path)
+        # Ensure init returns session identifiers
+        if name == 'initialize_meta_analysis':
+            if isinstance(result, dict):
+                result.setdefault('session_id', session_id)
+                result.setdefault('session_path', session_path)
         return {
             'jsonrpc': '2.0',
             'id': request_id,
@@ -101,7 +143,7 @@ def call_tool_resp(request_id, name: str, arguments: Dict[str, Any]):
         return {
             'jsonrpc': '2.0',
             'id': request_id,
-            'result': {'content': [{'type': 'text', 'text': json.dumps({'status':'error','message':str(e)})}]},
+            'result': {'content': [{'type': 'text', 'text': json.dumps({'status': 'error', 'message': str(e)})}]},
         }
 
 

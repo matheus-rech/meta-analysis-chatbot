@@ -1,0 +1,68 @@
+---
+alwaysApply: true
+---
+# Meta-Analysis Chatbot Architecture Guide
+
+## Project Overview
+This is a Meta-Analysis AI Chatbot that combines Python/Gradio frontend with R statistical backend for conducting comprehensive meta-analyses. The project uses a layered architecture with multiple implementation strategies.
+
+## Core Architecture Layers
+
+### 1. User Interface Layer (Python/Gradio)
+- **Main Entry Points:**
+  - [chatbot_langchain.py](mdc:chatbot_langchain.py) - LangChain-enhanced chatbot (recommended)
+  - [chatbot_app.py](mdc:chatbot_app.py) - Basic chatbot implementation
+  - [gradio_native_mcp.py](mdc:gradio_native_mcp.py) - Native Gradio MCP implementation
+  - [api_server.py](mdc:api_server.py) - FastAPI server with typed endpoints
+
+### 2. Orchestration Layer (Python MCP Bridge)
+- [server.py](mdc:server.py) - Minimal stdio JSON-RPC server that dispatches to R
+- Implements MCP-like protocol over stdio for Claude Desktop compatibility
+- Uses temporary files for large JSON payloads to avoid OS argument length limits
+
+### 3. Statistical Layer (R Backend)
+- [scripts/entry/mcp_tools.R](mdc:scripts/entry/mcp_tools.R) - Main R dispatcher
+- [scripts/tools/](mdc:scripts/tools/) - Individual R tool implementations
+- [scripts/adapters/meta_adapter.R](mdc:scripts/adapters/meta_adapter.R) - R package abstraction
+
+## Python-R Communication Bridge
+
+### Key Implementation Details:
+1. **Subprocess Communication**: Python spawns R processes via `subprocess.Popen`
+2. **Argument Passing**: Large payloads passed via temporary JSON files (prevents OS limits)
+3. **Timeout Management**: Configurable via `RSCRIPT_TIMEOUT_SEC` environment variable
+4. **Error Handling**: Debug mode via `DEBUG_R=1` for detailed R error messages
+5. **Session Management**: File-based persistence in `sessions/{session_id}/` directories
+
+### Critical Code Sections:
+- Path resolution: Lines 12-15 in [server.py](mdc:server.py)
+- R execution: Lines 17-47 in [server.py](mdc:server.py)
+- File-based args: Lines 30-35 in [server.py](mdc:server.py)
+- R dispatcher: Lines 12-21 in [scripts/entry/mcp_tools.R](mdc:scripts/entry/mcp_tools.R)
+
+## Session Structure
+```
+sessions/
+└── {session_id}/
+    ├── session.json       # Session configuration
+    ├── data/              # Raw uploaded data
+    ├── processing/        # Intermediate results
+    └── results/           # Final analysis outputs
+```
+
+## Available Tools
+1. `initialize_meta_analysis` - Create new session
+2. `upload_study_data` - Upload CSV data
+3. `perform_meta_analysis` - Run statistical analysis
+4. `generate_forest_plot` - Create visualization
+5. `assess_publication_bias` - Bias assessment
+6. `generate_report` - PDF/HTML report generation
+7. `get_session_status` - Check session state
+8. `health_check` - Verify R environment
+
+## Environment Variables
+- `RSCRIPT_BIN`: Path to Rscript binary (default: "Rscript")
+- `RSCRIPT_TIMEOUT_SEC`: Timeout in seconds (default: 30)
+- `DEBUG_R`: Enable R debug output (0/1)
+- `SESSIONS_DIR`: Session storage directory
+- `OPENAI_API_KEY` or `ANTHROPIC_API_KEY`: For chatbot functionality

@@ -1,0 +1,81 @@
+---
+globs: "*.py"
+---
+# Python Development Guidelines for Meta-Analysis Chatbot
+
+## Code Style
+- Follow PEP 8 conventions
+- Use type hints for function parameters and returns
+- Document complex functions with docstrings
+- Prefer pathlib.Path over os.path for file operations
+
+## Python-R Bridge Best Practices
+
+### When modifying subprocess communication:
+1. **Always use temporary files for large JSON payloads**
+   - Write JSON to temp file if > 1KB
+   - Pass file path to R script instead of inline JSON
+   - Clean up temp files after use
+
+2. **Error handling pattern:**
+```python
+try:
+    result = execute_r(tool_name, args, session_path)
+except subprocess.TimeoutExpired:
+    # Handle timeout
+except RuntimeError as e:
+    # Handle R script errors
+```
+
+3. **Path resolution pattern:**
+```python
+# Check local first, then Docker paths
+_LOCAL_PATH = Path(__file__).parent / "scripts"
+_DOCKER_PATH = Path("/app/scripts")
+SCRIPTS_PATH = _LOCAL_PATH if _LOCAL_PATH.exists() else _DOCKER_PATH
+```
+
+## Gradio UI Guidelines
+
+### When adding new UI features:
+1. Add to appropriate implementation file (chatbot_langchain.py, gradio_native_mcp.py)
+2. Update UI components in app.py if needed
+3. Maintain consistent styling with existing components
+4. Use gr.State() for session management
+
+### Tool registration pattern for LangChain:
+```python
+class NewToolInput(BaseModel):
+    session_id: str
+    parameter: str
+
+tool_configs.append({
+    "name": "new_tool",
+    "description": "Tool description",
+    "input_class": NewToolInput,
+    "method": mcp_server.new_tool
+})
+```
+
+## MCP Server Implementation
+
+### When modifying server.py:
+1. Maintain JSON-RPC 2.0 compliance
+2. All tools must be registered in TOOLS dictionary
+3. Session paths must be created before R execution
+4. Return proper error responses with appropriate codes
+
+### Response format:
+```python
+{
+    'jsonrpc': '2.0',
+    'id': request_id,
+    'result': {'content': [{'type': 'text', 'text': json.dumps(result)}]}
+}
+```
+
+## Testing Requirements
+- Test R script integration with small and large payloads
+- Verify timeout handling
+- Check session persistence
+- Validate error messages are sanitized in production

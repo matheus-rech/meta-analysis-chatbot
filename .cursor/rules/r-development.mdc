@@ -1,0 +1,149 @@
+---
+globs: "*.R"
+---
+# R Development Guidelines for Meta-Analysis Backend
+
+## Code Style
+- Follow tidyverse style guide
+- Use explicit namespacing (e.g., `jsonlite::fromJSON`)
+- Always handle missing/NULL values
+- Return consistent JSON structures
+
+## R Script Structure
+
+### Tool Implementation Pattern:
+```r
+tool_name_function <- function(args) {
+  tryCatch({
+    # Validate inputs
+    if (is.null(args$required_param)) {
+      stop("Missing required parameter: required_param")
+    }
+    
+    # Process
+    result <- process_data(args)
+    
+    # Return success
+    list(
+      status = "success",
+      result = result,
+      message = "Operation completed"
+    )
+  }, error = function(e) {
+    list(
+      status = "error",
+      message = as.character(e$message),
+      details = NULL
+    )
+  })
+}
+```
+
+### Dispatcher Registration (mcp_tools.R):
+```r
+else if (tool_name == "new_tool") {
+  source(file.path(script_dir, "../tools/new_tool.R"))
+  new_tool_function(json_args)
+}
+```
+
+## Input Handling
+
+### File-based JSON arguments:
+```r
+# Support both inline JSON and file paths
+json_input <- args[2]
+if (file.exists(json_input)) {
+  json_text <- paste(readLines(json_input, warn = FALSE), collapse = "\n")
+  json_args <- fromJSON(json_text)
+} else {
+  json_args <- fromJSON(json_input)
+}
+```
+
+### Field name normalization:
+```r
+# Handle both snake_case and camelCase
+normalize_field_names <- function(config) {
+  if (!is.null(config$camelCase) && is.null(config$snake_case)) {
+    config$snake_case <- config$camelCase
+  }
+  config
+}
+```
+
+## Session Management
+
+### Session structure access:
+```r
+session_path <- args$session_path
+data_dir <- file.path(session_path, "data")
+results_dir <- file.path(session_path, "results")
+session_config <- fromJSON(file.path(session_path, "session.json"))
+```
+
+### Creating directories:
+```r
+for (d in c("data", "processing", "results")) {
+  dir.create(file.path(session_path, d), 
+             showWarnings = FALSE, 
+             recursive = TRUE)
+}
+```
+
+## Data Validation
+
+### For meta-analysis data:
+```r
+# Check for required columns based on effect measure
+validate_columns <- function(data, effect_measure) {
+  required <- switch(effect_measure,
+    "OR" = c("study", "event1", "n1", "event2", "n2"),
+    "RR" = c("study", "event1", "n1", "event2", "n2"),
+    "MD" = c("study", "mean1", "sd1", "n1", "mean2", "sd2", "n2"),
+    "SMD" = c("study", "mean1", "sd1", "n1", "mean2", "sd2", "n2"),
+    c("study", "effect_size", "se")
+  )
+  
+  missing <- setdiff(required, names(data))
+  if (length(missing) > 0) {
+    stop(paste("Missing required columns:", paste(missing, collapse = ", ")))
+  }
+}
+```
+
+## Error Handling
+
+### Always use tryCatch for main operations:
+```r
+result <- tryCatch({
+  # Main operation
+}, error = function(e) {
+  if (Sys.getenv("DEBUG_R") == "1") {
+    # Detailed error in debug mode
+    list(status = "error", message = e$message, traceback = traceback())
+  } else {
+    # Sanitized error in production
+    list(status = "error", message = "Operation failed")
+  }
+})
+```
+
+## Output Format
+
+### Consistent JSON response:
+```r
+respond <- function(obj) {
+  cat(toJSON(obj, auto_unbox = TRUE, null = "null"))
+}
+```
+
+### File paths in responses:
+```r
+# Always return relative paths from session root
+list(
+  status = "success",
+  plot_file = basename(plot_path),
+  forest_plot_path = file.path("results", basename(plot_path))
+)
+```

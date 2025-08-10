@@ -1,0 +1,46 @@
+{
+  "mcpServers": {
+    "meta-analysis-sse": {
+      "url": "http://127.0.0.1:7860/gradio_api/mcp/sse",
+      "description": "Meta-Analysis MCP Server via Gradio SSE",
+      "capabilities": {
+        "tools": true,
+        "resources": false,
+        "prompts": false
+      }
+    },
+    "meta-analysis-api": {
+      "url": "http://127.0.0.1:7860/mcp",
+      "description": "Meta-Analysis FastMCP API Server",
+      "capabilities": {
+        "tools": true,
+        "resources": false,
+        "prompts": false
+      }
+    }
+  },
+  "instructions": {
+    "setup": [
+      "1. Start the Gradio server first:",
+      "   python gradio_native_mcp.py",
+      "   OR",
+      "   python api_server.py (for FastMCP)",
+      "2. Open Cursor Settings (Cmd/Ctrl + ,)",
+      "3. Search for 'MCP' in settings",
+      "4. Add this configuration to MCP Servers",
+      "5. Save and restart Cursor",
+      "6. Open a new chat in Agent mode",
+      "7. Test by asking: '@mcp What meta-analysis tools are available?'"
+    ],
+    "requirements": [
+      "Gradio server must be running on port 7860",
+      "For SSE: Gradio 5.32.0+ with mcp_server=True",
+      "For API: FastMCP package installed"
+    ],
+    "troubleshooting": {
+      "connection_refused": "Ensure Gradio server is running on port 7860",
+      "no_tools_found": "Check that GRADIO_MCP_SERVER=True is set",
+      "timeout_errors": "Increase RSCRIPT_TIMEOUT_SEC environment variable"
+    }
+  }
+}
