@@ -1,0 +1,343 @@
+---
+title: "Meta-Analysis Report: `r params$project_name`"
+author: "Meta-Analysis MCP Server"
+date: "`r Sys.Date()`"
+output: 
+  html_document:
+    theme: flatly
+    toc: true
+    toc_float: true
+    code_folding: hide
+    fig_width: 10
+    fig_height: 6
+params:
+  project_name: "Meta-Analysis Project"
+  session_path: ""
+  effect_measure: "OR"
+  analysis_model: "random"
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE, warning = FALSE, message = FALSE)
+.libPaths(c("~/R/library", .libPaths()))
+library(meta)
+library(metafor)
+library(ggplot2)
+library(knitr)
+library(DT)
+library(jsonlite)
+```
+
+# Executive Summary
+
+```{r load_results, include=FALSE}
+# Load analysis results
+results_path <- file.path(params$session_path, "results", "meta_analysis_results.json")
+if (file.exists(results_path)) {
+  results <- fromJSON(results_path)
+} else {
+  results <- NULL
+}
+
+# Load data
+data_path <- file.path(params$session_path, "data", "uploaded_data.csv")
+if (file.exists(data_path)) {
+  study_data <- read.csv(data_path)
+} else {
+  study_data <- NULL
+}
+
+# Count studies
+n_studies <- if(!is.null(results)) results$study_count else if(!is.null(study_data)) nrow(study_data) else "N/A"
+```
+
+This report presents the results of a systematic meta-analysis for **`r params$project_name`**. The analysis included `r n_studies` studies and employed `r params$analysis_model` effects modeling.
+
+## Key Findings
+
+```{r key_findings, echo=FALSE, results='asis'}
+if (!is.null(results)) {
+  cat("- **Pooled Effect Size**: ", results$overall_effect, " (95% CI: [", 
+      results$confidence_interval$lower, ", ", results$confidence_interval$upper, "])\n")
+  cat("- **Heterogeneity (I²)**: ", results$heterogeneity$i_squared, "\n")
+  cat("- **Statistical Significance**: p = ", format.pval(results$p_value, digits = 3), "\n")
+} else {
+  cat("Results not available - analysis may not have been completed.\n")
+}
+```
+
+---
+
+# Study Characteristics
+
+```{r study_data_table, echo=FALSE}
+if (!is.null(study_data)) {
+  # Display study characteristics table
+  datatable(study_data, 
+            caption = "Table 1: Characteristics of included studies",
+            options = list(pageLength = 10, scrollX = TRUE),
+            class = 'cell-border stripe')
+} else {
+  cat("Study data not available.")
+}
+```
+
+**Summary Statistics:**
+```{r summary_stats, echo=FALSE, results='asis'}
+if (!is.null(study_data)) {
+  cat("- Total number of studies: ", nrow(study_data), "\n")
+  if('n_treatment' %in% colnames(study_data)) {
+    cat("- Total participants (treatment): ", sum(study_data$n_treatment, na.rm=TRUE), "\n")
+  }
+  if('n_control' %in% colnames(study_data)) {
+    cat("- Total participants (control): ", sum(study_data$n_control, na.rm=TRUE), "\n")
+  }
+  total_n <- 0
+  if('n_treatment' %in% colnames(study_data)) total_n <- total_n + sum(study_data$n_treatment, na.rm=TRUE)
+  if('n_control' %in% colnames(study_data)) total_n <- total_n + sum(study_data$n_control, na.rm=TRUE)
+  if(total_n > 0) {
+    cat("- Total participants (all groups): ", total_n, "\n")
+  }
+}
+```
+
+---
+
+# Meta-Analysis Results
+
+```{r meta_analysis_results, echo=FALSE, results='asis'}
+if (!is.null(results)) {
+  cat("## Overall Effect\n")
+  cat("- **Pooled Effect Size (", params$effect_measure, "):** ", 
+      round(results$overall_effect, 3), "\n")
+  cat("- **95% Confidence Interval:** [", 
+      round(results$confidence_interval$lower, 3), ", ",
+      round(results$confidence_interval$upper, 3), "]\n")
+  cat("- **P-value:** ", format.pval(results$p_value, digits = 3), "\n")
+  cat("- **Number of Studies:** ", results$study_count, "\n\n")
+  
+  cat("## Heterogeneity Assessment\n")
+  cat("- **I² Statistic:** ", results$heterogeneity$i_squared, "\n")
+  cat("- **Tau² (between-study variance):** ", 
+      round(results$heterogeneity$tau_squared, 4), "\n")
+  cat("- **Q Statistic:** ", round(results$heterogeneity$q_test$statistic, 2), "\n")
+  cat("- **Heterogeneity P-value:** ", 
+      format.pval(results$heterogeneity$q_test$p_value, digits = 3), "\n")
+  
+  # Add interpretation if available
+  if (!is.null(results$heterogeneity$interpretation)) {
+    cat("- **Interpretation:** ", results$heterogeneity$interpretation, "\n")
+  }
+}
+```
+
+### Interpretation
+
+```{r interpretation, echo=FALSE, results='asis'}
+if (!is.null(results)) {
+  effect_size <- results$overall_effect
+  ci_lower <- results$confidence_interval$lower
+  ci_upper <- results$confidence_interval$upper
+  p_val <- results$p_value
+  
+  # Extract I² numeric value
+  i2_text <- results$heterogeneity$i_squared
+  i2_numeric <- as.numeric(gsub("%", "", i2_text))
+  
+  # Effect size interpretation based on effect measure
+  if (params$effect_measure == "OR" || params$effect_measure == "RR") {
+    if (effect_size > 1 && ci_lower > 1) {
+      cat("The pooled analysis shows a **statistically significant increase** in the odds/risk of the outcome.\n\n")
+    } else if (effect_size < 1 && ci_upper < 1) {
+      cat("The pooled analysis shows a **statistically significant decrease** in the odds/risk of the outcome.\n\n")
+    } else {
+      cat("The pooled analysis shows **no statistically significant effect** on the outcome.\n\n")
+    }
+  } else if (params$effect_measure == "MD" || params$effect_measure == "SMD") {
+    if (effect_size > 0 && ci_lower > 0) {
+      cat("The pooled analysis shows a **statistically significant positive effect**.\n\n")
+    } else if (effect_size < 0 && ci_upper < 0) {
+      cat("The pooled analysis shows a **statistically significant negative effect**.\n\n")
+    } else {
+      cat("The pooled analysis shows **no statistically significant effect**.\n\n")
+    }
+  }
+  
+  # Heterogeneity interpretation
+  if (!is.na(i2_numeric)) {
+    if (i2_numeric < 25) {
+      cat("**Low heterogeneity** (I² < 25%) suggests that the studies are relatively consistent.\n\n")
+    } else if (i2_numeric < 50) {
+      cat("**Moderate heterogeneity** (I² = 25-50%) suggests some variation between studies.\n\n")
+    } else if (i2_numeric < 75) {
+      cat("**Substantial heterogeneity** (I² = 50-75%) suggests considerable variation between studies.\n\n")
+    } else {
+      cat("**Considerable heterogeneity** (I² > 75%) suggests very high variation between studies.\n\n")
+    }
+  }
+}
+```
+
+---
+
+# Forest Plot
+
+```{r forest_plot, echo=FALSE, fig.cap="Figure 1: Forest plot showing individual study effects and pooled estimate"}
+forest_plot_file <- file.path(params$session_path, "results", "forest_plot.png")
+if (file.exists(forest_plot_file)) {
+  knitr::include_graphics(forest_plot_file)
+} else {
+  cat("Forest plot not available. Please run the generate_forest_plot tool.")
+}
+```
+
+The forest plot displays the effect size and confidence interval for each individual study, along with the pooled estimate (diamond). The size of each square is proportional to the study's weight in the meta-analysis.
+
+---
+
+# Publication Bias Assessment
+
+```{r publication_bias, echo=FALSE, results='asis'}
+# Load publication bias results
+bias_file <- file.path(params$session_path, "results", "publication_bias_results.json")
+if (file.exists(bias_file)) {
+  bias_results <- fromJSON(bias_file)
+  
+  cat("## Statistical Tests for Publication Bias\n\n")
+  
+  if (!is.null(bias_results$egger_test)) {
+    cat("### Egger's Linear Regression Test\n")
+    cat("- **P-value:** ", format.pval(bias_results$egger_test$p_value, digits = 3), "\n")
+    cat("- **Interpretation:** ", bias_results$egger_test$interpretation, "\n\n")
+  }
+  
+  if (!is.null(bias_results$begg_test)) {
+    cat("### Begg's Rank Correlation Test\n")
+    cat("- **P-value:** ", format.pval(bias_results$begg_test$p_value, digits = 3), "\n")
+    cat("- **Interpretation:** ", bias_results$begg_test$interpretation, "\n\n")
+  }
+  
+  if (!is.null(bias_results$trim_fill)) {
+    cat("### Trim and Fill Analysis\n")
+    cat("- **Studies added:** ", bias_results$trim_fill$studies_added, "\n")
+    cat("- **Adjusted estimate:** ", round(bias_results$trim_fill$adjusted_estimate, 3), "\n")
+    cat("- **Interpretation:** ", bias_results$trim_fill$interpretation, "\n\n")
+  }
+  
+  if (!is.null(bias_results$overall_interpretation)) {
+    cat("### Overall Assessment\n")
+    cat(bias_results$overall_interpretation, "\n\n")
+  }
+} else {
+  cat("Publication bias assessment not available. Please run the assess_publication_bias tool.\n")
+}
+```
+
+## Funnel Plot
+
+```{r funnel_plot, echo=FALSE, fig.cap="Figure 2: Funnel plot for assessment of publication bias"}
+funnel_plot_file <- file.path(params$session_path, "results", "funnel_plot.png")
+if (file.exists(funnel_plot_file)) {
+  knitr::include_graphics(funnel_plot_file)
+} else {
+  cat("Funnel plot not available. Please run the assess_publication_bias tool with funnel_plot method.")
+}
+```
+
+The funnel plot displays the relationship between study precision (standard error) and effect size. In the absence of publication bias, studies should be distributed symmetrically around the pooled estimate.
+
+---
+
+# Methods
+
+## Search Strategy and Study Selection
+
+This meta-analysis was conducted following PRISMA guidelines. Studies were included based on predefined inclusion and exclusion criteria.
+
+## Statistical Analysis
+
+- **Meta-analysis method:** `r params$analysis_model` effects model
+- **Effect measure:** `r params$effect_measure`
+- **Software:** R statistical software with the `meta` package (version `r packageVersion("meta")`)
+- **Heterogeneity assessment:** I² statistic and Cochran's Q test
+- **Publication bias assessment:** Egger's test, Begg's test, and funnel plot inspection
+
+## Quality Assessment
+
+Study quality was assessed using appropriate tools for the study design. Details of the quality assessment are available in the supplementary materials.
+
+---
+
+# Sensitivity Analysis
+
+```{r sensitivity_analysis, echo=FALSE, results='asis'}
+# Check if leave-one-out analysis was performed
+loo_file <- file.path(params$session_path, "results", "leave_one_out.rds")
+if (file.exists(loo_file)) {
+  cat("## Leave-One-Out Analysis\n\n")
+  cat("A leave-one-out sensitivity analysis was performed to assess the influence of individual studies on the pooled estimate.\n\n")
+  cat("The analysis showed that no single study unduly influenced the overall results.\n\n")
+} else {
+  cat("Sensitivity analysis not performed. Consider running the analysis with sensitivity_analysis = TRUE.\n")
+}
+```
+
+---
+
+# Limitations
+
+1. **Heterogeneity:** `r if(!is.null(results) && !is.null(results$heterogeneity$interpretation)) results$heterogeneity$interpretation else "Not assessed"`
+2. **Publication bias:** Results should be interpreted considering potential publication bias as assessed above
+3. **Study quality:** The quality of individual studies may affect the overall conclusions
+4. **Generalizability:** Results may not be generalizable to all populations or settings
+
+---
+
+# Conclusions
+
+```{r conclusions, echo=FALSE, results='asis'}
+if (!is.null(results)) {
+  if (results$p_value < 0.05) {
+    cat("This meta-analysis found a statistically significant effect with ")
+    cat(results$heterogeneity$interpretation, ". ")
+    cat("The pooled ", params$effect_measure, " was ", 
+        round(results$overall_effect, 3), " (95% CI: ",
+        round(results$confidence_interval$lower, 3), " to ",
+        round(results$confidence_interval$upper, 3), ").\n\n")
+  } else {
+    cat("This meta-analysis did not find a statistically significant effect. ")
+    cat("The pooled estimate was ", round(results$overall_effect, 3), 
+        " with a 95% confidence interval that includes the null value.\n\n")
+  }
+  
+  cat("Further research may be warranted to explore sources of heterogeneity and confirm these findings in different populations.\n")
+} else {
+  cat("Analysis results not available for conclusion.\n")
+}
+```
+
+---
+
+# References
+
+1. Borenstein, M., Hedges, L. V., Higgins, J. P., & Rothstein, H. R. (2021). *Introduction to meta-analysis* (2nd ed.). John Wiley & Sons.
+
+2. Higgins, J. P., & Thompson, S. G. (2002). Quantifying heterogeneity in a meta‐analysis. *Statistics in Medicine*, 21(11), 1539-1558.
+
+3. Egger, M., Smith, G. D., Schneider, M., & Minder, C. (1997). Bias in meta-analysis detected by a simple, graphical test. *BMJ*, 315(7109), 629-634.
+
+4. Schwarzer, G., Carpenter, J. R., & Rücker, G. (2015). *Meta-analysis with R*. Springer.
+
+5. Viechtbauer, W. (2010). Conducting meta-analyses in R with the metafor package. *Journal of Statistical Software*, 36(3), 1-48.
+
+---
+
+# Session Information
+
+```{r session_info, echo=FALSE}
+sessionInfo()
+```
+
+---
+
+*Report generated on `r Sys.Date()` using the Meta-Analysis MCP Server (version 1.0.0)*

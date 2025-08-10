@@ -1,0 +1,41 @@
+# PoC container for Gradio + MCP Python SDK + R
+FROM rocker/r2u:24.04
+
+# System deps
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    python3 python3-venv python3-pip \
+    libcurl4-openssl-dev libssl-dev libxml2-dev \
+    libfontconfig1-dev libharfbuzz-dev libfribidi-dev \
+    libfreetype6-dev libpng-dev libtiff5-dev libjpeg-dev \
+    pandoc && \
+    rm -rf /var/lib/apt/lists/*
+
+# R packages via apt (fast binaries) and CRAN fallback
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    r-cran-meta r-cran-metafor r-cran-jsonlite r-cran-ggplot2 \
+    r-cran-rmarkdown r-cran-knitr r-cran-readxl r-cran-base64enc \
+    r-cran-dt r-cran-reticulate && \
+    rm -rf /var/lib/apt/lists/*
+
+WORKDIR /app
+
+# Copy PoC
+COPY poc/gradio-mcp/requirements-poc.txt ./
+
+# Python deps
+RUN python3 -m venv /opt/venv
+ENV PATH="/opt/venv/bin:${PATH}"
+RUN python -m pip install --upgrade pip && \
+    python -m pip install -r requirements-poc.txt
+ENV RETICULATE_PYTHON="/opt/venv/bin/python"
+
+COPY poc/gradio-mcp/app.py ./app.py
+COPY poc/gradio-mcp/server.py ./server.py
+COPY poc/gradio-mcp/api_server.py ./api_server.py
+COPY scripts ./scripts
+COPY templates ./templates
+
+EXPOSE 7860
+RUN python -m pip install jupyterlab
+
+CMD ["uvicorn", "api_server:app", "--host", "0.0.0.0", "--port", "7860"]

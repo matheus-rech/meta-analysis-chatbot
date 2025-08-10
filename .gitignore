@@ -1,0 +1,83 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+env/
+venv/
+.venv
+ENV/
+env.bak/
+venv.bak/
+*.egg-info/
+dist/
+build/
+
+# R
+.Rhistory
+.RData
+.Rproj.user
+*.Rproj
+
+# Sessions and data
+sessions/
+*.csv
+*.xlsx
+*.rds
+results/
+temp/
+tmp/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.DS_Store
+
+# Environment
+.env
+.env.local
+.env.*.local
+
+# Logs
+*.log
+logs/
+
+# Docker
+.dockerignore
+
+# Node (if using TypeScript version)
+node_modules/
+package-lock.json
+yarn.lock
+
+# Jupyter
+.ipynb_checkpoints/
+*.ipynb
+
+# API Keys - NEVER commit these
+*api_key*
+*API_KEY*
+secrets/
+
+# Test data
+test_data/
+test-data/
+
+# Coverage
+htmlcov/
+.coverage
+.coverage.*
+coverage.xml
+*.cover
+
+# Documentation build
+docs/_build/
+docs/.doctrees/
+
+# Gradio
+gradio_cached_examples/
+flagged/

@@ -1,0 +1,15 @@
+gradio>=5.11.0
+mcp
+fastapi
+uvicorn[standard]
+pydantic
+openai
+anthropic
+rpy2
+numpy
+pandas
+python-multipart
+langchain
+langchain-openai
+langchain-anthropic
+tiktoken

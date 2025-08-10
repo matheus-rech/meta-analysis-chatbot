@@ -1,0 +1,156 @@
+# assess_publication_bias.R
+
+library(metafor)
+source("scripts/cochrane_guidance.R")
+source("scripts/cochrane_guidance.R")
+
+assess_publication_bias <- function(args) {
+  session_path <- args$session_path
+  
+  # Load analysis results
+  analysis_results_path <- file.path(session_path, "processing", "analysis_results.rds")
+  if (!file.exists(analysis_results_path)) {
+    stop("Analysis results not found. Please perform meta-analysis first.")
+  }
+  results <- readRDS(analysis_results_path)
+  
+  # Create output directory if it doesn't exist
+  output_dir <- file.path(session_path, "output")
+  if (!dir.exists(output_dir)) {
+    dir.create(output_dir, recursive = TRUE)
+  }
+  
+  # Validate methods
+  if (is.null(args$methods) || length(args$methods) == 0) {
+    stop("No methods specified for publication bias assessment")
+  }
+  
+  # Initialize response
+  response <- list(status = "success")
+  
+  # Generate funnel plot
+  if ("funnel_plot" %in% args$methods) {
+    funnel_plot_path <- file.path(output_dir, "funnel_plot.png")
+    png(funnel_plot_path, width = 800, height = 600, res = 100)
+    
+    tryCatch({
+      funnel(results$model, 
+             main = "Funnel Plot for Publication Bias Assessment",
+             xlab = get_effect_measure_label(results$model))
+      dev.off()
+      response$funnel_plot_path <- funnel_plot_path
+    }, error = function(e) {
+      dev.off()
+      response$funnel_plot_error <- paste("Failed to generate funnel plot:", e$message)
+    })
+  }
+  
+  # Perform Egger's test
+  if ("egger_test" %in% args$methods) {
+    tryCatch({
+      egger_result <- regtest(results$model)
+      response$egger_test <- list(
+        z = egger_result$zval,
+        p_value = egger_result$pval,
+        interpretation = ifelse(egger_result$pval < 0.05,
+                                "Significant evidence of publication bias (funnel plot asymmetry)",
+                                "No significant evidence of publication bias")
+      )
+    }, error = function(e) {
+      response$egger_test <- list(
+        error = paste("Egger's test failed:", e$message)
+      )
+    })
+  }
+  
+  # Perform Begg's test (rank correlation test)
+  if ("begg_test" %in% args$methods) {
+    tryCatch({
+      begg_result <- ranktest(results$model)
+      response$begg_test <- list(
+        tau = begg_result$tau,
+        p_value = begg_result$pval,
+        interpretation = ifelse(begg_result$pval < 0.05,
+                                "Significant evidence of publication bias (rank correlation)",
+                                "No significant evidence of publication bias")
+      )
+    }, error = function(e) {
+      response$begg_test <- list(
+        error = paste("Begg's test failed:", e$message)
+      )
+    })
+  }
+  
+  # Perform trim and fill analysis
+  if ("trim_fill" %in% args$methods) {
+    tryCatch({
+      trimfill_result <- trimfill(results$model)
+      
+      # Count missing studies
+      k0 <- trimfill_result$k0
+      
+      response$trimfill <- list(
+        missing_studies = k0,
+        side = trimfill_result$side,
+        adjusted_effect = as.numeric(trimfill_result$beta),
+        adjusted_ci_lower = trimfill_result$ci.lb,
+        adjusted_ci_upper = trimfill_result$ci.ub,
+        original_effect = as.numeric(results$model$beta),
+        interpretation = ifelse(k0 > 0,
+                                paste(k0, "studies appear to be missing on the", trimfill_result$side, "side"),
+                                "No evidence of missing studies")
+      )
+      
+      # Generate adjusted funnel plot if studies were imputed
+      if (k0 > 0) {
+        adjusted_funnel_path <- file.path(output_dir, "funnel_plot_adjusted.png")
+        png(adjusted_funnel_path, width = 800, height = 600, res = 100)
+        
+        tryCatch({
+          funnel(trimfill_result, 
+                 main = "Trim and Fill Adjusted Funnel Plot",
+                 xlab = get_effect_measure_label(results$model))
+          dev.off()
+          response$trimfill$adjusted_funnel_plot <- adjusted_funnel_path
+        }, error = function(e) {
+          dev.off()
+          response$trimfill$plot_error <- paste("Failed to generate adjusted funnel plot:", e$message)
+        })
+      }
+      
+    }, error = function(e) {
+      response$trimfill <- list(
+        error = paste("Trim and fill analysis failed:", e$message)
+      )
+    })
+  }
+  
+  # Count study number for recommendations
+  if (!is.null(results$model$k)) {
+    response$study_count <- results$model$k
+  }
+  
+  # Add Cochrane recommendations
+  response <- add_cochrane_recommendations(response, "publication_bias")
+  
+  # Add study count for recommendations
+  response$study_count <- length(results$model$yi)
+  
+  # Add Cochrane recommendations for publication bias
+  response <- add_cochrane_recommendations(response, "publication_bias")
+  
+  return(response)
+}
+
+# Helper function to get effect measure label
+get_effect_measure_label <- function(model) {
+  measure <- model$measure
+  switch(measure,
+    "OR" = "Log Odds Ratio",
+    "RR" = "Log Risk Ratio",
+    "MD" = "Mean Difference",
+    "SMD" = "Standardized Mean Difference",
+    "HR" = "Log Hazard Ratio",
+    "Effect Size"
+  )
+}

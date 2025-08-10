@@ -1,0 +1,104 @@
+# generate_report.R
+
+library(rmarkdown)
+library(jsonlite)
+
+generate_report <- function(args) {
+  session_path <- args$session_path
+  
+  # Validate inputs
+  if (is.null(args$format) || !args$format %in% c("html", "pdf", "word")) {
+    stop("Invalid report format. Must be 'html', 'pdf', or 'word'")
+  }
+  
+  # Create output directory if it doesn't exist
+  output_dir <- file.path(session_path, "output")
+  if (!dir.exists(output_dir)) {
+    dir.create(output_dir, recursive = TRUE)
+  }
+  
+  # Set report filename
+  report_filename <- paste0("meta_analysis_report.", args$format)
+  report_path <- file.path(output_dir, report_filename)
+  
+  # Get template path relative to script location
+  script_dir <- dirname(sys.frame(1)$ofile)
+  if (is.null(script_dir)) {
+    # Fallback for command line execution
+    args_cmd <- commandArgs(trailingOnly = FALSE)
+    script_file <- args_cmd[grep("--file=", args_cmd)]
+    if (length(script_file) > 0) {
+      script_dir <- dirname(gsub("--file=", "", script_file))
+    } else {
+      script_dir <- getwd()
+    }
+  }
+  
+  # Look for template in templates directory
+  template_path <- file.path(dirname(script_dir), "templates", "report_template.Rmd")
+  
+  # Use journal-specific template if requested
+  if (!is.null(args$journal_template)) {
+    journal_template_path <- file.path(dirname(script_dir), "templates", 
+                                       paste0(args$journal_template, "_template.Rmd"))
+    if (file.exists(journal_template_path)) {
+      template_path <- journal_template_path
+    } else {
+      warning(paste("Journal template", args$journal_template, "not found. Using default template."))
+    }
+  }
+  
+  # Check if template exists
+  if (!file.exists(template_path)) {
+    stop(paste("Report template not found at:", template_path))
+  }
+  
+  # Prepare parameters for the report
+  report_params <- list(
+    session_path = session_path,
+    include_code = ifelse(is.null(args$include_code), FALSE, args$include_code)
+  )
+  
+  # Set output format
+  output_format <- switch(args$format,
+    "html" = html_document(
+      toc = TRUE,
+      toc_float = TRUE,
+      theme = "cerulean",
+      highlight = "tango"
+    ),
+    "pdf" = pdf_document(
+      toc = TRUE,
+      toc_depth = 2,
+      highlight = "tango"
+    ),
+    "word" = word_document(
+      toc = TRUE,
+      toc_depth = 2
+    )
+  )
+  
+  # Render the report
+  tryCatch({
+    render(
+      input = template_path,
+      output_file = basename(report_path),
+      output_dir = dirname(report_path),
+      params = report_params,
+      output_format = output_format,
+      quiet = TRUE
+    )
+    
+    list(
+      status = "success",
+      report_path = report_path,
+      format = args$format
+    )
+    
+  }, error = function(e) {
+    list(
+      status = "error",
+      message = paste("Failed to generate report:", e$message)
+    )
+  })
+}

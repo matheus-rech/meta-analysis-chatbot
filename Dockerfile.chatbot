@@ -1,0 +1,60 @@
+# Dockerfile for Meta-Analysis AI Chatbot with LLM integration
+FROM rocker/r2u:24.04
+
+# System dependencies
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    python3 python3-venv python3-pip python3-dev \
+    build-essential \
+    libcurl4-openssl-dev libssl-dev libxml2-dev \
+    libfontconfig1-dev libharfbuzz-dev libfribidi-dev \
+    libfreetype6-dev libpng-dev libtiff5-dev libjpeg-dev \
+    pandoc \
+    git && \
+    rm -rf /var/lib/apt/lists/*
+
+# R packages via apt (fast binaries)
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    r-cran-meta r-cran-metafor r-cran-jsonlite r-cran-ggplot2 \
+    r-cran-rmarkdown r-cran-knitr r-cran-readxl r-cran-base64enc \
+    r-cran-dt && \
+    rm -rf /var/lib/apt/lists/*
+
+WORKDIR /app
+
+# Copy requirements
+COPY poc/gradio-mcp/requirements-chatbot.txt ./requirements.txt
+
+# Create and activate virtual environment
+RUN python3 -m venv /opt/venv
+ENV PATH="/opt/venv/bin:$PATH"
+
+# Upgrade pip and install Python dependencies
+RUN pip install --no-cache-dir --upgrade pip setuptools wheel && \
+    pip install --no-cache-dir -r requirements.txt
+
+# Copy application files
+COPY poc/gradio-mcp/chatbot_app.py ./chatbot_app.py
+COPY poc/gradio-mcp/chatbot_langchain.py ./chatbot_langchain.py
+COPY poc/gradio-mcp/server.py ./server.py
+COPY scripts ./scripts
+COPY templates ./templates
+
+# Create sessions directory
+RUN mkdir -p /app/sessions && chmod 777 /app/sessions
+
+# Environment variables (users should override these)
+ENV OPENAI_API_KEY=""
+ENV ANTHROPIC_API_KEY=""
+ENV SESSIONS_DIR="/app/sessions"
+ENV GRADIO_SERVER_NAME="0.0.0.0"
+ENV GRADIO_SERVER_PORT="7860"
+
+# Expose Gradio port
+EXPOSE 7860
+
+# Health check
+HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
+    CMD python3 -c "import requests; requests.get('http://localhost:7860/api/health')" || exit 1
+
+# Run the chatbot application (LangChain version by default)
+CMD ["python", "chatbot_langchain.py"]

@@ -1,0 +1,103 @@
+# perform_analysis.R
+
+library(metafor)
+library(jsonlite)
+source("scripts/cochrane_guidance.R")
+
+perform_meta_analysis <- function(args) {
+  session_path <- args$session_path
+  
+  # Load processed data
+  processed_data_path <- file.path(session_path, "processing", "processed_data.rds")
+  if (!file.exists(processed_data_path)) {
+    stop("Processed data not found. Please upload data first.")
+  }
+  loaded_data <- readRDS(processed_data_path)
+  
+  # Load session config
+  session_config_path <- file.path(session_path, "session.json")
+  if (!file.exists(session_config_path)) {
+    stop("Session configuration not found.")
+  }
+  session_config <- fromJSON(session_config_path)
+  
+  # Determine analysis method based on model type
+  method <- switch(session_config$analysis_model,
+    "fixed" = "FE",
+    "random" = "REML",
+    "auto" = "REML"  # Default to random effects
+  )
+  
+  # Perform meta-analysis using rma
+  tryCatch({
+    model <- rma(yi = yi, vi = vi, data = loaded_data, method = method)
+    
+    results <- list(
+      model = model,
+      egger = NULL,
+      leave1out = NULL
+    )
+    
+    # Perform additional tests if requested
+    if (!is.null(args$publication_bias) && args$publication_bias) {
+      results$egger <- regtest(model)
+    }
+    
+    if (!is.null(args$sensitivity_analysis) && args$sensitivity_analysis) {
+      results$leave1out <- leave1out(model)
+    }
+    
+    # Save results
+    analysis_results_path <- file.path(session_path, "processing", "analysis_results.rds")
+    saveRDS(results, file = analysis_results_path)
+    
+    # Return summary
+    summary_info <- list(
+      status = "success",
+      overall_effect = as.numeric(model$beta),
+      confidence_interval = list(
+        lower = model$ci.lb,
+        upper = model$ci.ub
+      ),
+      p_value = model$pval,
+      heterogeneity = list(
+        i_squared = model$I2,
+        tau_squared = model$tau2,
+        q_test = list(
+          statistic = model$QE,
+          p_value = model$QEp
+        )
+      )
+    )
+    
+    # Add publication bias test results if performed
+    if (!is.null(results$egger)) {
+      summary_info$publication_bias <- list(
+        egger_test = list(
+          p_value = results$egger$pval,
+          interpretation = ifelse(results$egger$pval < 0.05, 
+                                  "Significant evidence of publication bias",
+                                  "No significant evidence of publication bias")
+        )
+      )
+    }
+    
+    # Add study count for recommendations
+    summary_info$study_count <- nrow(loaded_data)
+    
+    # Add Cochrane recommendations
+    summary_info <- add_cochrane_recommendations(summary_info, "meta_analysis")
+    
+    # Add educational content on heterogeneity and effect measures
+    summary_info <- add_educational_content(summary_info, "heterogeneity")
+    summary_info <- add_educational_content(summary_info, "effect_measures")
+    
+    summary_info
+    
+  }, error = function(e) {
+    list(
+      status = "error",
+      message = paste("Meta-analysis failed:", e$message)
+    )
+  })
+}
