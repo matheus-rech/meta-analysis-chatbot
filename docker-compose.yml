@@ -1,0 +1,85 @@
+version: '3.8'
+
+services:
+  meta-analysis-chatbot:
+    build:
+      context: .
+      dockerfile: Dockerfile.enhanced
+    container_name: meta-analysis-enhanced
+    ports:
+      - "7860:7860"
+    environment:
+      # API Keys (set in .env file)
+      - OPENAI_API_KEY=${OPENAI_API_KEY}
+      - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY}
+      
+      # Application settings
+      - GRADIO_SERVER_NAME=0.0.0.0
+      - GRADIO_SERVER_PORT=7860
+      - SESSIONS_DIR=/app/sessions
+      - RSCRIPT_BIN=Rscript
+      - RSCRIPT_TIMEOUT_SEC=300
+      - DEBUG_R=${DEBUG_R:-0}
+      
+      # Optional: Database connection (for future)
+      - DATABASE_URL=${DATABASE_URL:-}
+      - REDIS_URL=${REDIS_URL:-}
+    
+    volumes:
+      # Persist sessions and outputs
+      - ./sessions:/app/sessions
+      - ./outputs:/app/outputs
+      - ./logs:/app/logs
+      
+    restart: unless-stopped
+    
+    networks:
+      - meta-analysis-network
+    
+    # Resource limits
+    deploy:
+      resources:
+        limits:
+          cpus: '2'
+          memory: 4G
+        reservations:
+          cpus: '1'
+          memory: 2G
+
+  # Optional: PostgreSQL for session storage (future enhancement)
+  postgres:
+    image: postgres:15-alpine
+    container_name: meta-analysis-db
+    environment:
+      - POSTGRES_DB=meta_analysis
+      - POSTGRES_USER=${DB_USER:-metauser}
+      - POSTGRES_PASSWORD=${DB_PASSWORD:-metapass}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    ports:
+      - "5432:5432"
+    networks:
+      - meta-analysis-network
+    profiles:
+      - with-db
+
+  # Optional: Redis for caching (future enhancement)
+  redis:
+    image: redis:7-alpine
+    container_name: meta-analysis-cache
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    networks:
+      - meta-analysis-network
+    profiles:
+      - with-cache
+
+networks:
+  meta-analysis-network:
+    driver: bridge
+
+volumes:
+  postgres_data:
+  redis_data:

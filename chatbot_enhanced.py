@@ -22,6 +22,8 @@ import numpy as np
 import pytz
 from PIL import Image
 from PyPDF2 import PdfReader
+import cv2
+from openai import OpenAI
 
 # LangChain imports for better tool orchestration
 from langchain.agents import Tool, AgentExecutor, create_openai_tools_agent
@@ -419,8 +421,59 @@ class EnhancedMCPToolWrapper:
         return f"❌ Report generation failed: {result.get('error', 'Unknown error')}"
 
 # =====================================================================================
-#  LLM Integration
+#  LLM & Multimodal Helpers
 # =====================================================================================
+
+def transcribe_audio_file(audio_path: str) -> str:
+    """Transcribe an audio file using OpenAI Whisper if available."""
+    try:
+        if not OPENAI_API_KEY:
+            return "Audio transcription requires OPENAI_API_KEY to be set."
+        client = OpenAI(api_key=OPENAI_API_KEY)
+        with open(audio_path, "rb") as af:
+            result = client.audio.transcriptions.create(
+                model="whisper-1",
+                file=af
+            )
+        text = getattr(result, "text", None)
+        return text or str(result)
+    except Exception as e:
+        return f"Audio transcription failed: {e}"
+
+
+def analyze_video_file(video_path: str) -> Dict[str, Any]:
+    """Extract lightweight metadata and sample frames count from a video using OpenCV."""
+    try:
+        cap = cv2.VideoCapture(video_path)
+        if not cap.isOpened():
+            return {"status": "error", "message": "Unable to open video"}
+        fps = cap.get(cv2.CAP_PROP_FPS) or 0.0
+        frame_count = int(cap.get(cv2.CAP_PROP_FRAME_COUNT) or 0)
+        width = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH) or 0)
+        height = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT) or 0)
+
+        sampled = 0
+        step = int(max(fps * 2, 1)) if fps > 0 else 30
+        for i in range(0, frame_count, step):
+            cap.set(cv2.CAP_PROP_POS_FRAMES, i)
+            success, _ = cap.read()
+            if not success:
+                break
+            sampled += 1
+            if sampled >= 10:
+                break
+        cap.release()
+        duration_s = (frame_count / fps) if fps > 0 else None
+        return {
+            "status": "success",
+            "fps": round(fps, 2) if fps else None,
+            "duration_seconds": round(duration_s, 2) if duration_s else None,
+            "frame_count": frame_count,
+            "resolution": {"width": width, "height": height},
+            "sampled_frames": sampled,
+        }
+    except Exception as e:
+        return {"status": "error", "message": str(e)}
 
 def get_llm_client(model_name: str):
     """Get the appropriate LLM client based on model selection"""
@@ -493,6 +546,22 @@ def handle_multimodal_submit(message: dict, history: list, model_name: str, shou
                         file_context += f"\n\nImage Analysis: {img_result['message']}"
                 
                 elif ext in [".csv", ".xlsx", ".xls"]:
+                elif ext in [".mp3", ".wav", ".m4a", ".flac", ".ogg"]:
+                    # Transcribe audio content when API key is available
+                    transcript = transcribe_audio_file(file_path)
+                    file_context += f"\n\nAudio Transcript (excerpt):\n{(transcript or '')[:1000]}"
+                
+                elif ext in [".mp4", ".mov", ".avi", ".mkv"]:
+                    # Analyze basic video metadata and sampling
+                    vid_info = analyze_video_file(file_path)
+                    if vid_info.get("status") == "success":
+                        file_context += (
+                            f"\n\nVideo Info: FPS={vid_info.get('fps')}, Duration(s)={vid_info.get('duration_seconds')}, "
+                            f"Frames={vid_info.get('frame_count')}, Resolution={vid_info.get('resolution')}, "
+                            f"SampledFrames={vid_info.get('sampled_frames')}"
+                        )
+                    else:
+                        file_context += f"\n\nVideo analysis error: {vid_info.get('message')}"
                     # Read data file
                     try:
                         if ext == ".csv":

@@ -1,0 +1,82 @@
+# Enhanced Meta-Analysis Chatbot Docker Image
+# Multi-stage build for optimized production deployment
+
+# Stage 1: R environment setup
+FROM rocker/r-ver:4.3.0 AS r-builder
+
+# Install system dependencies for R packages
+RUN apt-get update && apt-get install -y \
+    libcurl4-openssl-dev \
+    libssl-dev \
+    libxml2-dev \
+    libfontconfig1-dev \
+    libharfbuzz-dev \
+    libfribidi-dev \
+    libfreetype6-dev \
+    libpng-dev \
+    libtiff5-dev \
+    libjpeg-dev \
+    pandoc \
+    && rm -rf /var/lib/apt/lists/*
+
+# Install R packages
+RUN R -e "install.packages(c('meta', 'metafor', 'jsonlite', 'ggplot2', 'rmarkdown', 'knitr', 'dplyr', 'tidyr'), repos='https://cloud.r-project.org/')"
+
+# Stage 2: Python environment with R
+FROM python:3.11-slim
+
+# Copy R installation from builder
+COPY --from=r-builder /usr/local/lib/R /usr/local/lib/R
+COPY --from=r-builder /usr/local/bin/R /usr/local/bin/R
+COPY --from=r-builder /usr/local/bin/Rscript /usr/local/bin/Rscript
+
+# Install system dependencies
+RUN apt-get update && apt-get install -y \
+    gcc \
+    g++ \
+    gfortran \
+    libcurl4-openssl-dev \
+    libssl-dev \
+    libxml2-dev \
+    libfontconfig1-dev \
+    pandoc \
+    curl \
+    && rm -rf /var/lib/apt/lists/*
+
+# Set R environment variables
+ENV R_HOME=/usr/local/lib/R
+ENV PATH="${R_HOME}/bin:${PATH}"
+ENV LD_LIBRARY_PATH="${R_HOME}/lib:${LD_LIBRARY_PATH}"
+
+# Set working directory
+WORKDIR /app
+
+# Copy requirements first for better caching
+COPY requirements-chatbot.txt .
+
+# Install Python dependencies
+RUN pip install --no-cache-dir -r requirements-chatbot.txt
+
+# Copy application code
+COPY . .
+
+# Create necessary directories
+RUN mkdir -p sessions outputs logs cache
+
+# Set environment variables
+ENV PYTHONUNBUFFERED=1
+ENV GRADIO_SERVER_NAME=0.0.0.0
+ENV GRADIO_SERVER_PORT=7860
+ENV SESSIONS_DIR=/app/sessions
+ENV RSCRIPT_BIN=Rscript
+ENV RSCRIPT_TIMEOUT_SEC=300
+
+# Health check
+HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
+    CMD curl -f http://localhost:7860/health || exit 1
+
+# Expose port
+EXPOSE 7860
+
+# Run the enhanced chatbot
+CMD ["python", "chatbot_enhanced.py"]
