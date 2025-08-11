@@ -3,6 +3,9 @@
 
 library(jsonlite)
 
+# Declare sourced functions to avoid lintr warnings
+generate_forest_plot_metafor_core <- NULL
+
 # Get script directory for sourcing
 script_dir <- dirname(sys.frame(1)$ofile)
 if (is.null(script_dir)) {
@@ -19,7 +22,7 @@ if (is.null(script_dir)) {
 source(file.path(script_dir, "../adapters", "meta_adapter.R"))
 # Declare adapter functions for lintr visibility
 if (FALSE) {
-  generate_forest_plot_core <- function(...) {}
+  generate_forest_plot_meta_core <- function(...) {}
   generate_forest_plot_metafor_core <- function(...) {}
 }
 
@@ -113,7 +116,7 @@ generate_forest_plot <- function(args) {
           custom_labels = custom_labels
         )
       } else {
-        plot_path <- generate_forest_plot_core(
+        plot_path <- generate_forest_plot_meta_core(
           meta_result = meta_result,
           output_file = output_file,
           title = title,

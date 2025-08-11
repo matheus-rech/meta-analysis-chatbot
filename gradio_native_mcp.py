@@ -236,8 +236,8 @@ class RIntegrationMCPServer:
         result = self.execute_r_tool(
             "generate_forest_plot",
             {
-                "session_id": session_id,
-                "plot_style": plot_style,
+            "session_id": session_id,
+            "plot_style": plot_style,
                 "confidence_level": confidence_level,
                 "engine": engine,
             },
@@ -300,16 +300,66 @@ class MetaAnalysisChatbot:
         self.setup_llm()
     
     def setup_llm(self):
-        """Setup LLM client (OpenAI or Anthropic)"""
-        if OPENAI_AVAILABLE and os.getenv("OPENAI_API_KEY"):
-            self.llm_client = openai.OpenAI()
-            self.llm_model = "gpt-4-turbo-preview"
-            self.llm_type = "openai"
-        elif ANTHROPIC_AVAILABLE and os.getenv("ANTHROPIC_API_KEY"):
+        """Setup LLM client with multi-provider support (OpenAI/DeepSeek/Ollama/OpenRouter/Anthropic)."""
+        self.llm_client = None
+        self.llm_type = None
+
+        provider_hint = os.getenv("LLM_PROVIDER", "").lower()
+
+        # Anthropic first if explicitly requested
+        if (provider_hint == "anthropic" or provider_hint == "claude") and ANTHROPIC_AVAILABLE and os.getenv("ANTHROPIC_API_KEY"):
             self.llm_client = anthropic.Anthropic()
-            self.llm_model = "claude-3-opus-20240229"
+            self.llm_model = os.getenv("ANTHROPIC_MODEL", "claude-3-5-sonnet-20240620")
             self.llm_type = "anthropic"
-        else:
+            return
+
+        # OpenAI-compatible: native OpenAI, OpenRouter, Ollama, DeepSeek via base_url + api_key
+        if OPENAI_AVAILABLE:
+            base_url = (
+                os.getenv("OPENAI_BASE_URL")
+                or os.getenv("DEEPSEEK_BASE_URL")
+                or os.getenv("OLLAMA_BASE_URL")
+            )
+
+            # API key resolution (OpenAI first, then DeepSeek, then generic)
+            api_key = (
+                os.getenv("OPENAI_API_KEY")
+                or os.getenv("DEEPSEEK_API_KEY")
+                or os.getenv("OPENAI_COMPAT_API_KEY")
+                or os.getenv("OLLAMA_API_KEY")
+            )
+
+            client_kwargs = {}
+            if base_url:
+                client_kwargs["base_url"] = base_url.rstrip("/")
+            if api_key:
+                client_kwargs["api_key"] = api_key
+
+            # Default to OpenAI cloud if no base_url specified
+            try:
+                self.llm_client = openai.OpenAI(**client_kwargs)
+                # Prefer user-specified model; fallback sequence
+                self.llm_model = (
+                    os.getenv("OPENAI_MODEL")
+                    or os.getenv("DEEPSEEK_MODEL")
+                    or os.getenv("OLLAMA_MODEL")
+                    or "gpt-4.1"
+                )
+                # Support o3/o4.1 selection by env
+                # Examples: OPENAI_MODEL=o3-mini / gpt-4.1 / gpt-4o
+            self.llm_type = "openai"
+                return
+            except Exception:
+                pass
+
+        # Anthropic fallback if available and key present
+        if ANTHROPIC_AVAILABLE and os.getenv("ANTHROPIC_API_KEY"):
+            self.llm_client = anthropic.Anthropic()
+            self.llm_model = os.getenv("ANTHROPIC_MODEL", "claude-3-opus-20240229")
+            self.llm_type = "anthropic"
+            return
+
+        # No provider configured
             self.llm_client = None
             self.llm_type = None
     
@@ -364,10 +414,10 @@ class MetaAnalysisChatbot:
                 ai_response = response.content[0].text
             
             if auto_tools:
-                # Check if we should execute any tools based on the conversation
-                tool_results = self.detect_and_execute_tools(message, ai_response)
-                if tool_results:
-                    ai_response += "\n\n" + tool_results
+            # Check if we should execute any tools based on the conversation
+            tool_results = self.detect_and_execute_tools(message, ai_response)
+            if tool_results:
+                ai_response += "\n\n" + tool_results
             
             return ai_response
             
@@ -444,15 +494,15 @@ def create_gradio_app():
     with gr.Blocks(title="🧬 Meta-Analysis Assistant", theme=gr.themes.Soft()) as app:
         gr.Markdown(
             """
-            # 🧬 Meta-Analysis AI Assistant
+        # 🧬 Meta-Analysis AI Assistant
             A single-chat interface that guides, teaches, and executes meta-analyses.
             """
         )
 
-        chatbot_ui = gr.Chatbot(
+                chatbot_ui = gr.Chatbot(
             height=640,
-            type="messages",
-            show_label=False,
+                    type="messages",
+                    show_label=False,
             avatar_images=(None, "🤖"),
         )
 
@@ -463,9 +513,9 @@ def create_gradio_app():
             submit_btn=True,
         )
 
-        session_info = gr.Textbox(
+                session_info = gr.Textbox(
             label="Session",
-            value="No active session",
+                    value="No active session",
             interactive=False,
         )
         

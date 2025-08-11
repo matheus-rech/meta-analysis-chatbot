@@ -1,9 +1,6 @@
 # meta_adapter.R
 # Adapter layer to integrate meta package functions with MCP server
 
-# Set library path (from meta_analysis.R)
-.libPaths(c("~/R/library", .libPaths()))
-
 # Load required libraries
 suppressMessages({
   library(meta)
@@ -63,7 +60,8 @@ perform_meta_analysis_core <- function(
             colnames(data)
         ))
   ) {
-    # Continuous outcome meta-analysis (supports both treatment/control and e/c schemas)
+    # Continuous outcome meta-analysis
+    # (supports both treatment/control and e/c schemas)
     if (
       all(
         c("n.e", "mean.e", "sd.e", "n.c", "mean.c", "sd.c") %in% colnames(data)
@@ -215,7 +213,7 @@ convert_metafor_to_meta_format <- function(data, session_config) {
     return(converted)
   }
 
-  return(data)
+  data
 }
 
 # Generate forest plot using meta package
