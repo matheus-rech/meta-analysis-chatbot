@@ -155,13 +155,14 @@ class TestRunner:
         env = os.environ.copy()
         env["PYTHONUNBUFFERED"] = "1"
         env["DEBUG_R"] = "1"
+        env["TEST_MODE"] = "1"
         
         # Use a test API key if not set
         if "OPENAI_API_KEY" not in env and "ANTHROPIC_API_KEY" not in env:
             env["OPENAI_API_KEY"] = "test-key-for-ui-testing"
         
         proc = subprocess.Popen(
-            [sys.executable, str(self.project_root / "gradio_native_mcp.py")],
+            [sys.executable, str(self.project_root / "chatbot_enhanced.py")],
             env=env,
             stdout=subprocess.PIPE,
             stderr=subprocess.PIPE,
