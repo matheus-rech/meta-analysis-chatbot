@@ -28,13 +28,18 @@ class TestMCPServerFunctional:
         env["PYTHONUNBUFFERED"] = "1"
         env["RSCRIPT_TIMEOUT_SEC"] = "60"
         
+        # Get project root (parent of tests directory)
+        project_root = Path(__file__).parent.parent
+        server_path = project_root / "server.py"
+        
         proc = subprocess.Popen(
-            ["python", "server.py"],
+            ["python", str(server_path)],
             stdin=subprocess.PIPE,
             stdout=subprocess.PIPE,
             stderr=subprocess.PIPE,
             text=True,
-            env=env
+            env=env,
+            cwd=str(project_root)  # Run from project root
         )
         
         time.sleep(2)  # Give server time to start
