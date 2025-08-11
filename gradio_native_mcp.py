@@ -8,6 +8,7 @@ import json
 import subprocess
 import base64
 import tempfile
+import re
 from typing import Dict, Any, List, Optional
 from pathlib import Path
 
@@ -200,11 +201,29 @@ class RIntegrationMCPServer:
             "sensitivity_analysis": sensitivity_analysis
         })
     
+    def assess_publication_bias(
+        self,
+        session_id: str = None,
+        methods: Optional[List[str]] = None,
+    ) -> Dict[str, Any]:
+        """Assess publication bias using R backend"""
+        if not session_id:
+            session_id = self.current_session_id
+        if not session_id:
+            return {"status": "error", "error": "No active session"}
+        if methods is None:
+            methods = ["funnel_plot", "egger_test"]
+        return self.execute_r_tool(
+            "assess_publication_bias",
+            {"session_id": session_id, "methods": methods},
+        )
+    
     def generate_forest_plot(
         self,
         session_id: str = None,
         plot_style: str = "modern",
-        confidence_level: float = 0.95
+        confidence_level: float = 0.95,
+        engine: str = "metafor",
     ) -> Dict[str, Any]:
         """Generate forest plot"""
         
@@ -214,11 +233,15 @@ class RIntegrationMCPServer:
         if not session_id:
             return {"status": "error", "error": "No active session"}
         
-        result = self.execute_r_tool("generate_forest_plot", {
-            "session_id": session_id,
-            "plot_style": plot_style,
-            "confidence_level": confidence_level
-        })
+        result = self.execute_r_tool(
+            "generate_forest_plot",
+            {
+                "session_id": session_id,
+                "plot_style": plot_style,
+                "confidence_level": confidence_level,
+                "engine": engine,
+            },
+        )
         
         # If successful, try to load the image
         if result.get("status") == "success":
@@ -253,6 +276,18 @@ class RIntegrationMCPServer:
             "include_code": include_code
         })
 
+    def get_session_status(self, session_id: str = None) -> Dict[str, Any]:
+        """Get session status including paths to results"""
+        if not session_id:
+            session_id = self.current_session_id
+        if not session_id:
+            return {"status": "error", "error": "No active session"}
+        return self.execute_r_tool("get_session_status", {"session_id": session_id})
+
+    def health_check(self, detailed: bool = False) -> Dict[str, Any]:
+        """Verify R environment and tool availability"""
+        return self.execute_r_tool("health_check", {"detailed": detailed})
+
 
 class MetaAnalysisChatbot:
     """
@@ -278,7 +313,7 @@ class MetaAnalysisChatbot:
             self.llm_client = None
             self.llm_type = None
     
-    def process_message(self, message: str, history: List[ChatMessage]) -> str:
+    def process_message(self, message: str, history: List[ChatMessage], auto_tools: bool = True) -> str:
         """Process user message with LLM and MCP tools"""
         
         if not self.llm_client:
@@ -328,11 +363,11 @@ class MetaAnalysisChatbot:
                 )
                 ai_response = response.content[0].text
             
-            # Check if we should execute any tools based on the conversation
-            tool_results = self.detect_and_execute_tools(message, ai_response)
-            
-            if tool_results:
-                ai_response += "\n\n" + tool_results
+            if auto_tools:
+                # Check if we should execute any tools based on the conversation
+                tool_results = self.detect_and_execute_tools(message, ai_response)
+                if tool_results:
+                    ai_response += "\n\n" + tool_results
             
             return ai_response
             
@@ -406,240 +441,330 @@ def create_gradio_app():
     mcp_server = RIntegrationMCPServer()
     chatbot = MetaAnalysisChatbot(mcp_server)
     
-    with gr.Blocks(title="🧬 Meta-Analysis Assistant (Native MCP)", theme=gr.themes.Soft()) as app:
+    with gr.Blocks(title="🧬 Meta-Analysis Assistant", theme=gr.themes.Soft()) as app:
+        gr.Markdown(
+            """
+            # 🧬 Meta-Analysis AI Assistant
+            A single-chat interface that guides, teaches, and executes meta-analyses.
+            """
+        )
+
+        chatbot_ui = gr.Chatbot(
+            height=640,
+            type="messages",
+            show_label=False,
+            avatar_images=(None, "🤖"),
+        )
+
+        msg_input = gr.MultimodalTextbox(
+            file_types=[".csv", ".xlsx", ".png", ".jpg", ".jpeg"],
+            placeholder="Ask a question, upload your data, or request synthetic data...",
+            label="",
+            submit_btn=True,
+        )
+
+        session_info = gr.Textbox(
+            label="Session",
+            value="No active session",
+            interactive=False,
+        )
         
-        gr.Markdown("""
-        # 🧬 Meta-Analysis AI Assistant
-        ### Native Gradio MCP Implementation with R Backend
-        
-        This implementation follows [Gradio's official MCP patterns](https://www.gradio.app/guides/building-mcp-server-with-gradio)
-        while maintaining full R integration for statistical analysis.
-        """)
-        
-        with gr.Tabs():
-            # Chatbot Interface Tab
-            with gr.Tab("💬 AI Assistant"):
-                chatbot_ui = gr.Chatbot(
-                    height=600,
-                    type="messages",
-                    show_label=False,
-                    avatar_images=(None, "🤖")
+        # Event handlers (UI only; hide from API/MCP)
+        def _encode_image_to_data_uri(path: str) -> Optional[str]:
+            try:
+                with open(path, "rb") as f:
+                    b64 = base64.b64encode(f.read()).decode()
+                return f"data:image/png;base64,{b64}"
+            except Exception:
+                return None
+
+        def _maybe_initialize():
+            if not mcp_server.current_session_id:
+                mcp_server.initialize_meta_analysis(
+                    name="Meta-Analysis Project",
+                    study_type="clinical_trial",
+                    effect_measure="OR",
+                    analysis_model="random",
                 )
-                
-                msg_input = gr.Textbox(
-                    placeholder="Ask me anything about meta-analysis...",
-                    label="Your message",
-                    lines=2
-                )
-                
-                with gr.Row():
-                    submit_btn = gr.Button("Send", variant="primary")
-                    clear_btn = gr.Button("Clear")
-                
-                session_info = gr.Textbox(
-                    label="Session Status",
-                    value="No active session",
-                    interactive=False
-                )
-                
-                # Example prompts
-                gr.Examples(
-                    examples=[
-                        "Start a new meta-analysis for clinical trials",
-                        "Upload my CSV data with study results",
-                        "Perform the analysis with heterogeneity testing",
-                        "Generate a forest plot",
-                        "Create an HTML report"
-                    ],
-                    inputs=msg_input
-                )
-            
-            # Direct Tools Tab (following MCP server pattern)
-            with gr.Tab("🛠️ Direct Tools"):
-                gr.Markdown("### Direct access to MCP tools (for testing/debugging)")
-                
-                with gr.Row():
-                    with gr.Column():
-                        # Initialize tool
-                        gr.Markdown("#### Initialize Meta-Analysis")
-                        init_name = gr.Textbox(label="Project Name", value="My Meta-Analysis")
-                        init_type = gr.Dropdown(
-                            ["clinical_trial", "observational", "diagnostic"],
-                            label="Study Type",
-                            value="clinical_trial"
-                        )
-                        init_measure = gr.Dropdown(
-                            ["OR", "RR", "MD", "SMD", "HR"],
-                            label="Effect Measure",
-                            value="OR"
-                        )
-                        init_model = gr.Dropdown(
-                            ["fixed", "random", "auto"],
-                            label="Analysis Model",
-                            value="random"
-                        )
-                        init_btn = gr.Button("Initialize")
-                        init_output = gr.JSON(label="Result")
-                    
-                    with gr.Column():
-                        # Upload data tool
-                        gr.Markdown("#### Upload Study Data")
-                        upload_file = gr.File(label="Upload CSV", file_types=[".csv"])
-                        upload_text = gr.Textbox(
-                            label="Or paste CSV data",
-                            lines=5,
-                            placeholder="study_id,effect_size,se\nStudy1,0.5,0.1"
-                        )
-                        upload_btn = gr.Button("Upload Data")
-                        upload_output = gr.JSON(label="Result")
-                
-                with gr.Row():
-                    with gr.Column():
-                        # Analysis tool
-                        gr.Markdown("#### Perform Analysis")
-                        analysis_hetero = gr.Checkbox(label="Heterogeneity Test", value=True)
-                        analysis_bias = gr.Checkbox(label="Publication Bias", value=True)
-                        analysis_sens = gr.Checkbox(label="Sensitivity Analysis", value=False)
-                        analysis_btn = gr.Button("Run Analysis")
-                        analysis_output = gr.JSON(label="Result")
-                    
-                    with gr.Column():
-                        # Forest plot tool
-                        gr.Markdown("#### Generate Forest Plot")
-                        plot_style = gr.Dropdown(
-                            ["classic", "modern", "journal_specific"],
-                            label="Style",
-                            value="modern"
-                        )
-                        plot_conf = gr.Slider(0.90, 0.99, value=0.95, label="Confidence Level")
-                        plot_btn = gr.Button("Generate Plot")
-                        plot_output = gr.JSON(label="Result")
-                        plot_image = gr.Image(label="Forest Plot")
-            
-            # File Upload Tab (following Gradio file-upload-mcp guide)
-            with gr.Tab("📁 File Upload"):
-                gr.Markdown("""
-                ### Upload Study Data
-                Following [Gradio's file upload MCP pattern](https://www.gradio.app/guides/file-upload-mcp)
-                """)
-                
-                file_upload = gr.File(
-                    label="Upload your data file",
-                    file_types=[".csv", ".xlsx", ".txt"],
-                    type="filepath"
-                )
-                
-                file_preview = gr.Dataframe(
-                    label="Data Preview",
-                    interactive=False
-                )
-                
-                validate_btn = gr.Button("Validate & Upload")
-                validation_output = gr.Textbox(label="Validation Result")
-        
-        # Event handlers
-        def chat_response(message, history):
+
+        def chat_response_mm(message, history):
             if not message:
-                return history, ""
-            
+                return history, None, session_info.value
+
+            text = message.get("text") or ""
+            files = message.get("files") or []
+
             # Add user message
-            history.append(ChatMessage(role="user", content=message))
-            
-            # Get AI response
-            response = chatbot.process_message(message, history)
-            history.append(ChatMessage(role="assistant", content=response))
-            
-            # Update session info
-            session_text = "No active session"
-            if mcp_server.current_session_id:
-                session_text = f"Active session: {mcp_server.current_session_id[:8]}..."
-            
-            return history, "", session_text
-        
-        # Chatbot events
-        msg_input.submit(
-            chat_response,
-            [msg_input, chatbot_ui],
-            [chatbot_ui, msg_input, session_info]
-        )
-        submit_btn.click(
-            chat_response,
-            [msg_input, chatbot_ui],
-            [chatbot_ui, msg_input, session_info]
-        )
-        clear_btn.click(
-            lambda: ([], "", "No active session"),
-            outputs=[chatbot_ui, msg_input, session_info]
-        )
-        
-        # Direct tool events
-        init_btn.click(
-            lambda n, t, m, am: mcp_server.initialize_meta_analysis(n, t, m, am),
-            [init_name, init_type, init_measure, init_model],
-            init_output
-        )
-        
-        def handle_file_upload(file_path, text_data):
-            if file_path:
-                df = pd.read_csv(file_path)
-                return mcp_server.upload_study_data(data=df)
-            elif text_data:
-                return mcp_server.upload_study_data(csv_text=text_data)
-            return {"status": "error", "error": "No data provided"}
-        
-        upload_btn.click(
-            handle_file_upload,
-            [upload_file, upload_text],
-            upload_output
-        )
-        
-        analysis_btn.click(
-            lambda h, b, s: mcp_server.perform_meta_analysis(
-                heterogeneity_test=h,
-                publication_bias=b,
-                sensitivity_analysis=s
-            ),
-            [analysis_hetero, analysis_bias, analysis_sens],
-            analysis_output
-        )
-        
-        def generate_and_show_plot(style, conf):
-            result = mcp_server.generate_forest_plot(
-                plot_style=style,
-                confidence_level=conf
+            history.append(ChatMessage(role="user", content=text))
+
+            # Handle file uploads (CSV/XLSX)
+            upload_msg = ""
+            if files:
+                for fp in files:
+                    if str(fp).lower().endswith(".csv"):
+                        try:
+                            df = pd.read_csv(fp)
+                            _maybe_initialize()
+                            up_res = mcp_server.upload_study_data(data=df)
+                            if up_res.get("status") == "success":
+                                upload_msg += "\n✅ Data uploaded successfully."
+                            else:
+                                upload_msg += f"\n❌ Upload failed: {up_res.get('error','unknown')}"
+                        except Exception as e:
+                            upload_msg += f"\n❌ Upload error: {e}"
+                    elif str(fp).lower().endswith((".xlsx", ".xls")):
+                        try:
+                            df = pd.read_excel(fp)
+                            _maybe_initialize()
+                            up_res = mcp_server.upload_study_data(data=df)
+                            upload_msg += "\n✅ Excel uploaded successfully." if up_res.get("status") == "success" else "\n❌ Upload failed."
+                        except Exception as e:
+                            upload_msg += f"\n❌ Upload error: {e}"
+
+            # Synthetic data request
+            synth_msg = ""
+            if re.search(r"\b(simulate|synthetic)\b", text, re.I):
+                _maybe_initialize()
+                m = re.search(r"\b(\d{1,4})\b", text)
+                n = int(m.group(1)) if m else 20
+                measure = "OR"
+                for cand in ["OR", "RR", "MD", "SMD", "PROP", "MEAN"]:
+                    if cand.lower() in text.lower():
+                        measure = cand
+                        break
+                # simple binary dataset for OR
+                if measure in ("OR", "RR"):
+                    rng = np.random.default_rng(42)
+                    df = pd.DataFrame(
+                        {
+                            "study": [f"S{i+1}" for i in range(n)],
+                            "event1": rng.integers(1, 20, size=n),
+                            "n1": rng.integers(50, 200, size=n),
+                            "event2": rng.integers(1, 25, size=n),
+                            "n2": rng.integers(50, 220, size=n),
+                        }
+                    )
+                else:
+                    # generic effect_size/se
+                    rng = np.random.default_rng(42)
+                    df = pd.DataFrame(
+                        {
+                            "study": [f"S{i+1}" for i in range(n)],
+                            "effect_size": rng.normal(0, 0.3, size=n),
+                            "se": rng.uniform(0.05, 0.2, size=n),
+                        }
+                    )
+                up_res = mcp_server.upload_study_data(data=df)
+                synth_msg = (
+                    "\n✅ Synthetic data generated and uploaded."
+                    if up_res.get("status") == "success"
+                    else "\n❌ Synthetic upload failed."
+                )
+
+            # Tool intents
+            tool_feedback = ""
+            low = text.lower()
+            if any(k in low for k in ["start", "begin", "initialize", "new session"]):
+                init_res = mcp_server.initialize_meta_analysis(
+                    name="Guided Session",
+                    study_type="clinical_trial",
+                    effect_measure="OR",
+                    analysis_model="random",
+                )
+                if init_res.get("status") == "success":
+                    tool_feedback += "\n✅ Session initialized."
+            if any(k in low for k in ["analy", "run", "perform"]):
+                ana = mcp_server.perform_meta_analysis()
+                if ana.get("status") == "success":
+                    summ = ana.get("summary") or ana
+                    tool_feedback += f"\n📊 Analysis complete. k={summ.get('study_count', 'N/A')}"
+            image_to_show = None
+            if any(k in low for k in ["forest", "plot"]):
+                plot_res = mcp_server.generate_forest_plot(engine="metafor")
+                if plot_res.get("status") == "success":
+                    pth = plot_res.get("plot_path") or plot_res.get("forest_plot_path")
+                    if pth and Path(pth).exists():
+                        uri = _encode_image_to_data_uri(pth)
+                        if uri:
+                            image_to_show = uri
+                            tool_feedback += "\n📈 Forest plot generated."
+            if any(k in low for k in ["bias", "egger", "funnel"]):
+                bias = mcp_server.assess_publication_bias()
+                if bias.get("status") == "success":
+                    tool_feedback += "\n🧪 Publication bias assessed."
+            if "report" in low:
+                rep = mcp_server.generate_report(format="html")
+                if rep.get("status") == "success":
+                    tool_feedback += "\n📄 Report generated (HTML)."
+
+            # LLM guidance (no auto tools)
+            guidance = chatbot.process_message(text, history, auto_tools=False)
+            guidance += upload_msg + synth_msg + tool_feedback
+            history.append(ChatMessage(role="assistant", content=guidance))
+
+            # Update session label
+            sess_lbl = (
+                f"Active session: {mcp_server.current_session_id[:8]}..."
+                if mcp_server.current_session_id
+                else "No active session"
             )
-            
-            # Load image if available
-            image = None
-            if result.get("plot_path") and Path(result["plot_path"]).exists():
-                image = result["plot_path"]
-            
-            return result, image
+
+            return history, None, sess_lbl
         
-        plot_btn.click(
-            generate_and_show_plot,
-            [plot_style, plot_conf],
-            [plot_output, plot_image]
+        # Chat events (single-chat UI)
+        msg_input.submit(
+            chat_response_mm,
+            [msg_input, chatbot_ui],
+            [chatbot_ui, msg_input, session_info],
+            show_api=False,
         )
-        
-        # File upload preview
-        def preview_file(file_path):
-            if file_path:
-                if file_path.endswith('.csv'):
-                    df = pd.read_csv(file_path)
-                    return df.head(10)
-            return None
-        
-        file_upload.change(
-            preview_file,
-            file_upload,
-            file_preview
+
+        # API-only MCP tool endpoints
+        # 1) Initialize meta-analysis
+        def initialize_meta_analysis(name: str,
+                                     study_type: str = "clinical_trial",
+                                     effect_measure: str = "OR",
+                                     analysis_model: str = "random") -> Dict[str, Any]:
+            """Initialize a new meta-analysis session"""
+            return mcp_server.initialize_meta_analysis(name, study_type, effect_measure, analysis_model)
+
+        gr.on(
+            None,
+            initialize_meta_analysis,
+            inputs=[
+                gr.Textbox(label="name", visible=False),
+                gr.Dropdown(["clinical_trial", "observational", "diagnostic"], label="study_type", value="clinical_trial", visible=False),
+                gr.Dropdown(["OR", "RR", "MD", "SMD", "HR"], label="effect_measure", value="OR", visible=False),
+                gr.Dropdown(["fixed", "random", "auto"], label="analysis_model", value="random", visible=False),
+            ],
+            outputs=gr.JSON(label="result", visible=False),
+            api_name="initialize_meta_analysis",
         )
-        
-        validate_btn.click(
-            lambda f: mcp_server.upload_study_data(data=pd.read_csv(f)) if f else {"error": "No file"},
-            file_upload,
-            validation_output
+
+        # 2) Upload study data
+        def upload_study_data(session_id: str, csv_text: str, validation_level: str = "comprehensive") -> Dict[str, Any]:
+            """Upload study data for analysis (CSV text)"""
+            return mcp_server.upload_study_data(csv_text=csv_text, session_id=session_id, validation_level=validation_level)
+
+        gr.on(
+            None,
+            upload_study_data,
+            inputs=[
+                gr.Textbox(label="session_id", visible=False),
+                gr.Textbox(label="csv_text", lines=8, visible=False),
+                gr.Dropdown(["basic", "comprehensive"], label="validation_level", value="comprehensive", visible=False),
+            ],
+            outputs=gr.JSON(label="result", visible=False),
+            api_name="upload_study_data",
+        )
+
+        # 3) Perform meta-analysis
+        def perform_meta_analysis(session_id: str,
+                                  heterogeneity_test: bool = True,
+                                  publication_bias: bool = True,
+                                  sensitivity_analysis: bool = False) -> Dict[str, Any]:
+            """Run statistical meta-analysis"""
+            return mcp_server.perform_meta_analysis(
+                session_id=session_id,
+                heterogeneity_test=heterogeneity_test,
+                publication_bias=publication_bias,
+                sensitivity_analysis=sensitivity_analysis,
+            )
+
+        gr.on(
+            None,
+            perform_meta_analysis,
+            inputs=[
+                gr.Textbox(label="session_id", visible=False),
+                gr.Checkbox(label="heterogeneity_test", value=True, visible=False),
+                gr.Checkbox(label="publication_bias", value=True, visible=False),
+                gr.Checkbox(label="sensitivity_analysis", value=False, visible=False),
+            ],
+            outputs=gr.JSON(label="result", visible=False),
+            api_name="perform_meta_analysis",
+        )
+
+        # 4) Generate forest plot
+        def generate_forest_plot(session_id: str,
+                                 plot_style: str = "modern",
+                                 confidence_level: float = 0.95) -> Dict[str, Any]:
+            """Generate a forest plot visualization"""
+            return mcp_server.generate_forest_plot(
+                session_id=session_id,
+                plot_style=plot_style,
+                confidence_level=confidence_level,
+            )
+
+        gr.on(
+            None,
+            generate_forest_plot,
+            inputs=[
+                gr.Textbox(label="session_id", visible=False),
+                gr.Dropdown(["classic", "modern", "journal_specific"], label="plot_style", value="modern", visible=False),
+                gr.Slider(0.90, 0.99, value=0.95, label="confidence_level", visible=False),
+            ],
+            outputs=gr.JSON(label="result", visible=False),
+            api_name="generate_forest_plot",
+        )
+
+        # 5) Assess publication bias
+        def assess_publication_bias(session_id: str, methods: str = "funnel_plot, egger_test") -> Dict[str, Any]:
+            """Assess publication bias (methods as comma-separated list)"""
+            methods_list = [m.strip() for m in methods.split(",") if m.strip()]
+            return mcp_server.assess_publication_bias(session_id=session_id, methods=methods_list)
+
+        gr.on(
+            None,
+            assess_publication_bias,
+            inputs=[
+                gr.Textbox(label="session_id", visible=False),
+                gr.Textbox(label="methods", value="funnel_plot, egger_test", visible=False),
+            ],
+            outputs=gr.JSON(label="result", visible=False),
+            api_name="assess_publication_bias",
+        )
+
+        # 6) Generate report
+        def generate_report(session_id: str, format: str = "html", include_code: bool = False) -> Dict[str, Any]:
+            """Generate a comprehensive analysis report"""
+            return mcp_server.generate_report(session_id=session_id, format=format, include_code=include_code)
+
+        gr.on(
+            None,
+            generate_report,
+            inputs=[
+                gr.Textbox(label="session_id", visible=False),
+                gr.Dropdown(["html", "pdf", "word"], label="format", value="html", visible=False),
+                gr.Checkbox(label="include_code", value=False, visible=False),
+            ],
+            outputs=gr.JSON(label="result", visible=False),
+            api_name="generate_report",
+        )
+
+        # 7) Get session status
+        def get_session_status(session_id: str) -> Dict[str, Any]:
+            """Get session status and file paths"""
+            return mcp_server.get_session_status(session_id=session_id)
+
+        gr.on(
+            None,
+            get_session_status,
+            inputs=[gr.Textbox(label="session_id", visible=False)],
+            outputs=gr.JSON(label="result", visible=False),
+            api_name="get_session_status",
+        )
+
+        # 8) Health check
+        def health_check(detailed: bool = False) -> Dict[str, Any]:
+            """Verify R environment"""
+            return mcp_server.health_check(detailed=detailed)
+
+        gr.on(
+            None,
+            health_check,
+            inputs=[gr.Checkbox(label="detailed", value=False, visible=False)],
+            outputs=gr.JSON(label="result", visible=False),
+            api_name="health_check",
         )
     
     return app
@@ -656,4 +781,4 @@ if __name__ == "__main__":
         print("Set OPENAI_API_KEY or ANTHROPIC_API_KEY for full functionality.")
     
     app = create_gradio_app()
-    app.launch(server_name="0.0.0.0", server_port=7860)
+    app.launch(server_name="0.0.0.0", server_port=7860, mcp_server=True)
