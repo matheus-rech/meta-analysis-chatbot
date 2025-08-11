@@ -567,6 +567,10 @@ def handle_multimodal_submit(message: dict, history: list, model_name: str, shou
                         file_context += f"\n\nImage Analysis: {img_result['message']}"
                 
                 elif ext in [".csv", ".xlsx", ".xls"]:
+                    # Process data files
+                    df = pd.read_csv(file_path) if ext == ".csv" else pd.read_excel(file_path)
+                    file_context += f"\n\nData Preview ({len(df)} rows x {len(df.columns)} columns):\n{df.head(5).to_string()}"
+                
                 elif ext in [".mp3", ".wav", ".m4a", ".flac", ".ogg"]:
                     # Transcribe audio content when API key is available
                     transcript = transcribe_audio_file(file_path)
