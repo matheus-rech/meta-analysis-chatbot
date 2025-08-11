@@ -4,6 +4,8 @@ import os
 import base64
 import tempfile
 import subprocess
+from utils.security_integration import apply_security_patches
+apply_security_patches()
 import uuid
 from typing import Any, Dict
 

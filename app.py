@@ -1,6 +1,8 @@
 import os
 import json
 import subprocess
+from utils.security_integration import apply_security_patches
+apply_security_patches()
 import threading
 from typing import Optional
 
