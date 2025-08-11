@@ -24,12 +24,12 @@ This document outlines a comprehensive testing plan for the Meta-Analysis Chatbo
    - Session-based state management
    - JSON I/O with file support
 
-### ⚠️ Gaps vs Standard MCP
+### ⚠️ Gaps vs Standard M
 
 1. **Missing Standard MCP Features**
    - No SSE (Server-Sent Events) transport
    - No resource management endpoints
-   - No prompt management
+   - No prompt managementCP
    - Limited error response format
 
 2. **Protocol Differences**

@@ -1,0 +1,46 @@
+# FastMCP 2.0 Requirements
+# This is for the standards-compliant MCP server using FastMCP 2.0
+
+# FastMCP 2.0 - The fast, Pythonic MCP framework
+fastmcp>=0.1.0
+
+# Core dependencies
+gradio>=5.11.0
+fastapi>=0.100.0
+uvicorn[standard]>=0.20.0
+pydantic>=2.0.0
+
+# LLM providers
+openai>=1.0.0
+anthropic>=0.20.0
+
+# Data processing
+pandas>=2.0.0
+numpy>=1.24.0
+rpy2>=3.5.0
+
+# File handling
+python-multipart
+PyPDF2>=3.0.0
+pillow>=10.0.0
+pytz
+
+# LangChain (optional, for advanced features)
+langchain>=0.1.0
+langchain-openai>=0.0.5
+langchain-anthropic>=0.1.0
+tiktoken
+
+# Async support
+asyncio
+aiofiles
+
+# Testing
+pytest>=7.0.0
+pytest-asyncio>=0.21.0
+
+# Monitoring (optional)
+psutil>=5.9.0
+
+# Development
+python-dotenv>=1.0.0
