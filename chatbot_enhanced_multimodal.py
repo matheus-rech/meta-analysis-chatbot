@@ -730,8 +730,7 @@ with gr.Blocks(
                 label="Conversation",
                 bubble_full_width=False,
                 height=600,
-                avatar_images=(None, "🤖"),
-                type="tuples"  # Explicitly set to avoid deprecation warning
+                avatar_images=(None, "🤖")
             )
             
             multimodal_input = gr.MultimodalTextbox(

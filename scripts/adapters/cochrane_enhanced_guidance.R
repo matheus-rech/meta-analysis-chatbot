@@ -774,9 +774,300 @@ model_selection_logic <- function(i_squared, n_studies, clinical_diversity) {
   return("random_effects_recommended")
 }
 
+#' Generate justification for model selection decision
+#' @param decision The model decision from model_selection_logic
+#' @return Justification text explaining the decision
+generate_model_justification <- function(decision) {
+  justifications <- list(
+    no_pooling = paste(
+      "Meta-analysis is not recommended due to insufficient number of studies.",
+      "With fewer than 3 studies, statistical pooling is unreliable and may",
+      "produce misleading results. Individual study results should be presented",
+      "separately with a narrative description of findings."
+    ),
+    
+    narrative_synthesis_preferred = paste(
+      "A narrative synthesis is preferred over meta-analysis due to the limited",
+      "number of studies (fewer than 5). Statistical pooling with so few studies",
+      "may be unstable and heterogeneity estimates unreliable. A structured",
+      "narrative approach following synthesis without meta-analysis (SWiM)",
+      "guidelines is recommended."
+    ),
+    
+    fixed_effect_possible = paste(
+      "A fixed-effect model may be appropriate given the low statistical",
+      "heterogeneity (I² < 25%) and absence of clinical diversity. This assumes",
+      "all studies estimate the same underlying effect. However, carefully",
+      "consider whether this assumption is realistic given the nature of the",
+      "intervention and populations studied."
+    ),
+    
+    random_effects_recommended = paste(
+      "A random-effects model is recommended to account for between-study",
+      "heterogeneity. This model assumes that the true effects in studies are",
+      "not identical but follow a distribution. This is typically more",
+      "appropriate for clinical interventions where some variation between",
+      "studies is expected. Use REML or DerSimonian-Laird estimation method."
+    )
+  )
+  
+  # Return the justification or a default message if decision not found
+  return(justifications[[decision]] %||%
+         "Unable to generate justification for the specified model decision.")
+}
+
 #' Null coalescing operator
 `%||%` <- function(x, y) {
   if (is.null(x)) y else x
+}
+
+#' Generate heterogeneity reporting checklist
+#' @return List of items to report regarding heterogeneity
+heterogeneity_reporting_checklist <- function() {
+  list(
+    statistical_measures = c(
+      "Report I² statistic with 95% confidence interval",
+      "Report Tau² (between-study variance) on the same scale as the outcome",
+      "Report Q statistic with degrees of freedom and p-value",
+      "Include prediction interval for random-effects models"
+    ),
+    visual_presentation = c(
+      "Provide forest plot with study weights visible",
+      "Consider subgroup forest plots if applicable",
+      "Include sensitivity analysis plots if performed"
+    ),
+    narrative_elements = c(
+      "Describe clinical and methodological diversity among studies",
+      "Explain investigation methods used (subgroup, meta-regression)",
+      "Discuss impact of heterogeneity on conclusions",
+      "State whether heterogeneity affects certainty of evidence (GRADE)"
+    )
+  )
+}
+
+#' Select appropriate effect measure based on context
+#' @param outcome_type Type of outcome (binary, continuous, time_to_event)
+#' @param event_rate Event rate for binary outcomes
+#' @param study_designs Types of study designs included
+#' @return Recommended effect measure
+select_effect_measure <- function(outcome_type, event_rate = NULL, study_designs = NULL) {
+  if (outcome_type == "binary") {
+    if (!is.null(event_rate) && event_rate < 0.1) {
+      return("odds_ratio")
+    } else if ("case_control" %in% study_designs) {
+      return("odds_ratio")
+    } else {
+      return("risk_ratio")
+    }
+  } else if (outcome_type == "continuous") {
+    return("mean_difference")  # or "standardized_mean_difference" based on scale consistency
+  } else if (outcome_type == "time_to_event") {
+    return("hazard_ratio")
+  }
+  
+  return("unclear")
+}
+
+#' Explain the rationale for effect measure choice
+#' @param effect_measure The chosen effect measure
+#' @return Explanation text
+explain_effect_measure_choice <- function(effect_measure) {
+  explanations <- list(
+    odds_ratio = paste(
+      "Odds ratio selected because it is appropriate for case-control studies",
+      "or when events are rare (<10%). OR has favorable mathematical properties",
+      "but can be difficult to interpret clinically."
+    ),
+    risk_ratio = paste(
+      "Risk ratio selected as it provides intuitive interpretation for",
+      "prospective studies. RR directly measures the probability of an event",
+      "in the intervention group relative to the control group."
+    ),
+    risk_difference = paste(
+      "Risk difference selected to show absolute effect size. This measure",
+      "is useful for calculating number needed to treat (NNT) and provides",
+      "information about the public health impact of the intervention."
+    ),
+    mean_difference = paste(
+      "Mean difference selected as all studies use the same measurement scale.",
+      "This preserves the original units which aids clinical interpretation."
+    ),
+    standardized_mean_difference = paste(
+      "Standardized mean difference selected because studies use different",
+      "scales to measure the same construct. SMD allows comparison across",
+      "different measurement instruments."
+    ),
+    hazard_ratio = paste(
+      "Hazard ratio selected for time-to-event data. HR accounts for",
+      "censoring and provides information about the instantaneous risk",
+      "over the entire follow-up period."
+    )
+  )
+  
+  return(explanations[[effect_measure]] %||%
+         "Unable to explain the effect measure choice.")
+}
+
+#' Select appropriate publication bias test
+#' @param n_studies Number of studies
+#' @param outcome_type Type of outcome
+#' @param effect_measure Effect measure being used
+#' @return Recommended test for publication bias
+select_bias_test <- function(n_studies, outcome_type, effect_measure = NULL) {
+  if (n_studies < 10) {
+    return(list(
+      test = "none",
+      reason = "Too few studies for reliable testing",
+      recommendation = "Discuss publication bias risk qualitatively"
+    ))
+  }
+  
+  if (outcome_type == "continuous") {
+    return(list(
+      test = "egger",
+      reason = "Egger's test is appropriate for continuous outcomes"
+    ))
+  } else if (outcome_type == "binary") {
+    if (effect_measure == "odds_ratio") {
+      return(list(
+        test = "harbord",
+        reason = "Harbord test is less affected by heterogeneity for OR"
+      ))
+    } else {
+      return(list(
+        test = "peters",
+        reason = "Peters test is appropriate for binary outcomes with RR"
+      ))
+    }
+  }
+  
+  return(list(
+    test = "egger",
+    reason = "Default to Egger's test"
+  ))
+}
+
+#' Provide limitations of publication bias tests
+#' @return List of important limitations
+bias_test_limitations <- function() {
+  list(
+    general = c(
+      "All tests have low power with fewer than 10 studies",
+      "Tests may detect small-study effects rather than publication bias",
+      "Asymmetry can be caused by heterogeneity, not just publication bias"
+    ),
+    specific = list(
+      egger = "Can give false positives when there is substantial heterogeneity",
+      begg = "Has lower statistical power than Egger's test",
+      harbord = "Specifically designed for odds ratios, less affected by heterogeneity",
+      peters = "Better for binary outcomes with low event rates"
+    ),
+    interpretation = c(
+      "A significant test does not prove publication bias exists",
+      "A non-significant test does not prove absence of bias",
+      "Consider multiple sources of funnel plot asymmetry",
+      "Use as one piece of evidence alongside other considerations"
+    )
+  )
+}
+
+#' Assess feasibility of subgroup analysis
+#' @param n_studies Total number of studies
+#' @param planned_subgroups Number or list of planned subgroups
+#' @return Assessment of feasibility
+assess_subgroup_feasibility <- function(n_studies, planned_subgroups = NULL) {
+  n_subgroups <- if (is.numeric(planned_subgroups)) {
+    planned_subgroups
+  } else if (is.list(planned_subgroups)) {
+    length(planned_subgroups)
+  } else {
+    0
+  }
+  
+  if (n_studies < 10) {
+    return(list(
+      feasible = FALSE,
+      reason = "Too few studies for reliable subgroup analysis",
+      recommendation = "Consider as exploratory analysis only"
+    ))
+  }
+  
+  studies_per_subgroup <- n_studies / max(n_subgroups, 2)
+  
+  if (studies_per_subgroup < 4) {
+    return(list(
+      feasible = FALSE,
+      reason = "Too few studies per subgroup for meaningful analysis",
+      recommendation = "Reduce number of subgroups or treat as hypothesis-generating"
+    ))
+  }
+  
+  return(list(
+    feasible = TRUE,
+    reason = "Adequate number of studies for planned subgroups",
+    recommendation = "Ensure subgroups were pre-specified in protocol"
+  ))
+}
+
+#' Provide methods for subgroup analysis
+#' @return List of methodological guidance
+subgroup_analysis_methods <- function() {
+  list(
+    statistical_approach = list(
+      test = "Test for subgroup differences (interaction test)",
+      interpretation = "Focus on the test for interaction, not within-subgroup effects",
+      software = "Use meta-regression or subgroup analysis functions in meta packages"
+    ),
+    best_practices = c(
+      "Pre-specify subgroups in protocol to avoid data dredging",
+      "Limit number of subgroups to maintain statistical power",
+      "Use within-study information when available",
+      "Consider biological plausibility of subgroup effects"
+    ),
+    common_pitfalls = c(
+      "Multiple testing without adjustment",
+      "Post-hoc subgroup identification",
+      "Over-interpretation of subgroup findings",
+      "Ignoring the play of chance with small subgroups"
+    ),
+    reporting = c(
+      "Report all planned subgroup analyses, not just significant ones",
+      "Provide test for interaction with confidence interval",
+      "Discuss limitations and exploratory nature if post-hoc",
+      "Consider clinical importance alongside statistical significance"
+    )
+  )
+}
+
+#' Provide interpretation framework for subgroup analysis
+#' @return Structured guidance for interpretation
+subgroup_interpretation_guide <- function() {
+  list(
+    credibility_criteria = c(
+      "Was the subgroup analysis pre-specified?",
+      "Is the subgroup effect consistent across studies?",
+      "Was the test for interaction statistically significant?",
+      "Is there a strong biological rationale?",
+      "Is the subgroup effect consistent across related outcomes?"
+    ),
+    interpretation_levels = list(
+      high_credibility = "Pre-specified, significant interaction, biological rationale",
+      moderate_credibility = "Some criteria met, treat as hypothesis-generating",
+      low_credibility = "Post-hoc finding, no clear rationale, likely spurious"
+    ),
+    clinical_relevance = c(
+      "Consider magnitude of subgroup difference",
+      "Assess if difference would change clinical practice",
+      "Evaluate consistency with other evidence",
+      "Consider feasibility of applying in practice"
+    ),
+    reporting_guidance = c(
+      "Be transparent about exploratory vs confirmatory nature",
+      "Avoid overemphasis on subgroup findings in conclusions",
+      "Suggest further research if finding appears important",
+      "Consider GRADE approach for subgroup-specific recommendations"
+    )
+  )
 }
 
 #' Export guidance for LLM consumption

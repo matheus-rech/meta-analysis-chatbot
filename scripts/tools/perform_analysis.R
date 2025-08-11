@@ -18,6 +18,15 @@ if (is.null(script_dir)) {
 
 source(file.path(script_dir, "../adapters", "meta_adapter.R"))
 
+# Declare external functions to suppress linter warnings
+# These functions are defined in meta_adapter.R
+if (FALSE) {
+  convert_metafor_to_meta_format <- function(...) {}
+  perform_meta_analysis_core <- function(...) {}
+  assess_publication_bias_core <- function(...) {}
+  metainf <- function(...) {}
+}
+
 # Helper function to normalize field names
 normalize_field_names <- function(config) {
   # Normalize from camelCase to snake_case
@@ -61,15 +70,15 @@ perform_meta_analysis <- function(args) {
   # Convert data format if needed
   analysis_data <- convert_metafor_to_meta_format(loaded_data, session_config)
   
-  # Determine analysis method
-  method <- switch(session_config$analysisModel,
+  # Determine analysis method (use normalized field name)
+  method <- switch(session_config$analysis_model,
     "fixed" = "fixed",
     "random" = "random",
     "auto" = "random"  # Default to random effects
   )
   
-  # Get effect measure
-  measure <- session_config$effectMeasure
+  # Get effect measure (use normalized field name)
+  measure <- session_config$effect_measure
   
   # Perform meta-analysis
   tryCatch({
