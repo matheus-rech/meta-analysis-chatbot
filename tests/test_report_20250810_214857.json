@@ -1,0 +1,34 @@
+{
+  "start_time": "2025-08-10T21:48:38.532623",
+  "end_time": "2025-08-10T21:48:57.517508",
+  "duration": 18.984885,
+  "results": {
+    "MCP Server Functional Tests": {
+      "name": "MCP Server Functional Tests",
+      "passed": 0,
+      "failed": 0,
+      "errors": 0,
+      "skipped": 0,
+      "duration": 2.23559308052063,
+      "success": false,
+      "output": "============================= test session starts ==============================\nplatform darwin -- Python 3.13.5, pytest-8.4.1, pluggy-1.6.0 -- /Users/matheusrech/.python-global/bin/python3\ncachedir: .pytest_cache\nhypothesis profile 'default'\nmetadata: {'Python': '3.13.5', 'Platform': 'macOS-26.0-arm64-arm-64bit-Mach-O', 'Packages': {'pytest': '8.4.1', 'pluggy': '1.6.0'}, 'Plugins': {'hypothesis': '6.137.1', 'Faker': '37.5.3', 'allure-pytest': '2.15.0', 'anyio': '4.9.0', 'html': '4.1.1', 'asyncio': '1.1.0', 'timeout': '2.4.0', 'metadata': '3.1.1', 'cov': '6.2.1', 'playwright': '0.7.0', 'mock': '3.14.1', 'langsmith': '0.4.13', 'base-url': '2.1.0'}, 'Base URL': ''}\nrootdir: /Users/matheusrech/MEGA/Meta-Repo/meta-analysis-chatbot\nplugins: hypothesis-6.137.1, Faker-37.5.3, allure-pytest-2.15.0, anyio-4.9.0, html-4.1.1, asyncio-1.1.0, timeout-2.4.0, metadata-3.1.1, cov-6.2.1, playwright-0.7.0, mock-3.14.1, langsmith-0.4.13, base-url-2.1.0\nasyncio: mode=Mode.STRICT, asyncio_default_fixture_loop_scope=None, asyncio_default_test_loop_scope=function\ncollecting ... collected 0 items\n\n============================ no tests ran in 0.28s =============================\nERROR: file or directory not found: test_mcp_server_functional.py\n\n"
+    },
+    "Gradio UI Playwright Tests": {
+      "name": "Gradio UI Playwright Tests",
+      "passed": 0,
+      "failed": 0,
+      "errors": 0,
+      "skipped": 0,
+      "duration": 1.9275760650634766,
+      "success": false,
+      "output": "============================= test session starts ==============================\nplatform darwin -- Python 3.13.5, pytest-8.4.1, pluggy-1.6.0 -- /Users/matheusrech/.python-global/bin/python3\ncachedir: .pytest_cache\nhypothesis profile 'default'\nmetadata: {'Python': '3.13.5', 'Platform': 'macOS-26.0-arm64-arm-64bit-Mach-O', 'Packages': {'pytest': '8.4.1', 'pluggy': '1.6.0'}, 'Plugins': {'hypothesis': '6.137.1', 'Faker': '37.5.3', 'allure-pytest': '2.15.0', 'anyio': '4.9.0', 'html': '4.1.1', 'asyncio': '1.1.0', 'timeout': '2.4.0', 'metadata': '3.1.1', 'cov': '6.2.1', 'playwright': '0.7.0', 'mock': '3.14.1', 'langsmith': '0.4.13', 'base-url': '2.1.0'}, 'Base URL': ''}\nrootdir: /Users/matheusrech/MEGA/Meta-Repo/meta-analysis-chatbot\nplugins: hypothesis-6.137.1, Faker-37.5.3, allure-pytest-2.15.0, anyio-4.9.0, html-4.1.1, asyncio-1.1.0, timeout-2.4.0, metadata-3.1.1, cov-6.2.1, playwright-0.7.0, mock-3.14.1, langsmith-0.4.13, base-url-2.1.0\nasyncio: mode=Mode.STRICT, asyncio_default_fixture_loop_scope=None, asyncio_default_test_loop_scope=function\ncollecting ... collected 0 items\n\n- Generated html report: file:///Users/matheusrech/MEGA/Meta-Repo/meta-analysis-chatbot/playwright_report.html -\n============================ no tests ran in 0.29s =============================\nERROR: file or directory not found: test_gradio_ui_playwright.py\n\n"
+    }
+  },
+  "summary": {
+    "total_passed": 0,
+    "total_failed": 0,
+    "total_errors": 0,
+    "total_skipped": 0,
+    "success_rate": 0
+  }
+}
