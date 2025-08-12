@@ -16,7 +16,7 @@
   - Shared Python utilities: /utils/ (security_integration.py, secure_subprocess.py, validators.py, r_sanitizer.py, error_handler.py, health_check.py, etc.).
   - Templates and assets: /templates/ (if applicable). Runtime data: /sessions/ (never commit).
 - Data and sessions:
-  - Sessions live under sessions/{session_id}/ with subfolders input/, processing/, results/, tmp/. Keep responses compact; encode large outputs (plots, HTML) as base64 when returning via JSON.
+  - Sessions live under a directory configured by `SESSIONS_DIR` (e.g., `sessions/{session_id}/`) and contain `session.json` and subfolders: `input/`, `processing/`, `results/`, `tmp/`. Keep responses compact; encode large outputs (plots, HTML) as base64 when returning via JSON.
 - Common development commands:
   - Install Python deps: pip install -r requirements-chatbot.txt
   - Install R deps: Rscript scripts/utils/install_packages.R
