@@ -4,7 +4,7 @@
   - Python server: update the TOOLS list in /server.py and ensure call_tool_resp handles the new tool name. The server passes arguments via a temp JSON file and invokes R with [RSCRIPT_BIN, '--vanilla', scripts/entry/mcp_tools.R, <tool>, <args_file>, <session_dir>].
   - LangChain app: define a Pydantic input model and register a StructuredTool in /chatbot_langchain.py, then add it to the agent’s tool list with a clear description and schema.
 - Security and validation:
-  - Never use raw subprocess with shell=True. Rely on utils/security_integration.apply_security_patches() (already imported in server.py) or use utils/secure_subprocess.SecureSubprocess for any new subprocess calls.
+  - Never use subprocess.run() or subprocess.Popen() with shell=True. Rely on utils/security_integration.apply_security_patches() (already imported in server.py) or use utils/secure_subprocess.SecureSubprocess for any new subprocess calls.
   - Validate and sanitize all external inputs using utils/validators.InputValidator and utils/r_sanitizer.RScriptSanitizer. Ensure R-facing strings are sanitized and large payloads use temp files.
   - Do not commit secrets. Use environment variables (.env based on .env.example). Required/commonly used: OPENAI_API_KEY or ANTHROPIC_API_KEY, SESSIONS_DIR, RSCRIPT_BIN, RSCRIPT_TIMEOUT_SEC, DEBUG_R, GRADIO_SERVER_NAME, GRADIO_SERVER_PORT.
 - Code style and structure:
