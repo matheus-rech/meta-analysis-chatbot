@@ -1,3 +1,33 @@
+
+<general_rules>
+- Search before creating new components:
+  - R tools: check scripts/tools/ for an existing implementation. If none exists, create scripts/tools/<tool_name>.R and keep logic modular. Wire it in scripts/entry/mcp_tools.R (source the file and add a dispatcher branch).
+  - Python server: update the TOOLS list in /server.py and ensure call_tool_resp handles the new tool name. The server passes arguments via a temp JSON file and invokes R with [RSCRIPT_BIN, '--vanilla', scripts/entry/mcp_tools.R, <tool>, <args_file>, <session_dir>].
+  - LangChain app: define a Pydantic input model and register a StructuredTool in /chatbot_langchain.py, then add it to the agent’s tool list with a clear description and schema.
+- Security and validation:
+  - Never use subprocess.run() or subprocess.Popen() with shell=True. Rely on utils/security_integration.apply_security_patches() (already imported in server.py) or use utils/secure_subprocess.SecureSubprocess for any new subprocess calls.
+  - Validate and sanitize all external inputs using utils/validators.InputValidator and utils/r_sanitizer.RScriptSanitizer. Ensure R-facing strings are sanitized and large payloads use temp files.
+  - Do not commit secrets. Use environment variables (.env based on .env.example). Required/commonly used: OPENAI_API_KEY or ANTHROPIC_API_KEY, SESSIONS_DIR, RSCRIPT_BIN, RSCRIPT_TIMEOUT_SEC, DEBUG_R, GRADIO_SERVER_NAME, GRADIO_SERVER_PORT.
+- Code style and structure:
+  - Python (3.8+): use type hints and docstrings. Run format/lint/type-check before committing: black ., flake8 ., mypy . (install via tests/requirements-test.txt).
+  - R: keep functions pure and return structured JSON-compatible lists with a status field (success/error). Shared logic belongs in scripts/adapters/ (e.g., meta_adapter.R). Use jsonlite for IO.
+- File placement conventions:
+  - R tools: scripts/tools/; adapters/utilities: scripts/adapters/; R dispatcher: scripts/entry/mcp_tools.R.
+  - Python server/bridge: /server.py; UI apps: /chatbot_langchain.py, /chatbot_app.py, /gradio_native_mcp.py.
+  - Shared Python utilities: /utils/ (security_integration.py, secure_subprocess.py, validators.py, r_sanitizer.py, error_handler.py, health_check.py, etc.).
+  - Python server/bridge: server.py; UI apps: chatbot_langchain.py, chatbot_app.py, gradio_native_mcp.py.
+  - Shared Python utilities: utils/ (security_integration.py, secure_subprocess.py, validators.py, r_sanitizer.py, error_handler.py, health_check.py, etc.).
+  - Templates and assets: templates/ (if applicable). Runtime data: sessions/ (never commit).
+- Data and sessions:
+  - Sessions live under a directory configured by `SESSIONS_DIR` (e.g., `sessions/{session_id}/`) and contain `session.json` and subfolders: `input/`, `processing/`, `results/`, `tmp/`. Keep responses compact; encode large outputs (plots, HTML) as base64 when returning via JSON.
+- Common development commands:
+  - Install Python deps: pip install -r requirements-chatbot.txt
+  - Install R deps: Rscript scripts/utils/install_packages.R
+  - Run chatbot (recommended): python chatbot_langchain.py (serves on port 7860)
+  - Run tests: python tests/run_all_tests.py [functional|ui|integration|inspector]
+  - Docker build/run: docker build -f Dockerfile.chatbot -t meta-analysis-chatbot . ; docker run -p 7860:7860 -e OPENAI_API_KEY="..." meta-analysis-chatbot
+</general_rules>
+
 <repository_structure>
 - Applications and orchestration:
   - /chatbot_langchain.py: Primary Gradio + LangChain chatbot that orchestrates tools and manages conversation memory.
@@ -50,6 +80,7 @@
   - Specific suites: python tests/run_all_tests.py functional | ui | integration | inspector
   - Direct pytest: pytest tests/ -v ; coverage: pytest tests/ --cov=. --cov-report=html
 - Environment notes:
+
   - Set OPENAI_API_KEY or ANTHROPIC_API_KEY (UI tests may use a dummy key). Ensure R is installed and RSCRIPT_BIN is resolvable. Use DEBUG_R=1 to surface R stderr during failures.
 - What to test:
   - Python utils in /utils (validators, security wrappers, error handling, health checks).
