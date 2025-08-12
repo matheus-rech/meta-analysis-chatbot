@@ -14,7 +14,9 @@
   - R tools: scripts/tools/; adapters/utilities: scripts/adapters/; R dispatcher: scripts/entry/mcp_tools.R.
   - Python server/bridge: /server.py; UI apps: /chatbot_langchain.py, /chatbot_app.py, /gradio_native_mcp.py.
   - Shared Python utilities: /utils/ (security_integration.py, secure_subprocess.py, validators.py, r_sanitizer.py, error_handler.py, health_check.py, etc.).
-  - Templates and assets: /templates/ (if applicable). Runtime data: /sessions/ (never commit).
+  - Python server/bridge: server.py; UI apps: chatbot_langchain.py, chatbot_app.py, gradio_native_mcp.py.
+  - Shared Python utilities: utils/ (security_integration.py, secure_subprocess.py, validators.py, r_sanitizer.py, error_handler.py, health_check.py, etc.).
+  - Templates and assets: templates/ (if applicable). Runtime data: sessions/ (never commit).
 - Data and sessions:
   - Sessions live under a directory configured by `SESSIONS_DIR` (e.g., `sessions/{session_id}/`) and contain `session.json` and subfolders: `input/`, `processing/`, `results/`, `tmp/`. Keep responses compact; encode large outputs (plots, HTML) as base64 when returning via JSON.
 - Common development commands:
