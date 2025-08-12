@@ -1,3 +1,4 @@
+
 <general_rules>
 - Search before creating new components:
   - R tools: check scripts/tools/ for an existing implementation. If none exists, create scripts/tools/<tool_name>.R and keep logic modular. Wire it in scripts/entry/mcp_tools.R (source the file and add a dispatcher branch).
@@ -79,7 +80,8 @@
   - Specific suites: python tests/run_all_tests.py functional | ui | integration | inspector
   - Direct pytest: pytest tests/ -v ; coverage: pytest tests/ --cov=. --cov-report=html
 - Environment notes:
-  - Set OPENAI_API_KEY or ANTHROPIC_API_KEY (UI tests may use a dummy key). Ensure R is installed and RSCRIPT_BIN is resolvable. Use DEBUG_R=1 to surface R stderr during failures. `RSCRIPT_TIMEOUT_SEC` controls R subprocess timeouts.
+
+  - Set OPENAI_API_KEY or ANTHROPIC_API_KEY (UI tests may use a dummy key). Ensure R is installed and RSCRIPT_BIN is resolvable. Use DEBUG_R=1 to surface R stderr during failures.
 - What to test:
   - Python utils in /utils (validators, security wrappers, error handling, health checks).
   - MCP server in /server.py (tools/list and tools/call flows).
@@ -91,4 +93,3 @@
 
 <pull_request_formatting>
 </pull_request_formatting>
-
