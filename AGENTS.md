@@ -77,7 +77,7 @@
   - Specific suites: python tests/run_all_tests.py functional | ui | integration | inspector
   - Direct pytest: pytest tests/ -v ; coverage: pytest tests/ --cov=. --cov-report=html
 - Environment notes:
-  - Set OPENAI_API_KEY or ANTHROPIC_API_KEY (UI tests may use a dummy key). Ensure R is installed and RSCRIPT_BIN is resolvable. Use DEBUG_R=1 to surface R stderr during failures.
+  - Set OPENAI_API_KEY or ANTHROPIC_API_KEY (UI tests may use a dummy key). Ensure R is installed and RSCRIPT_BIN is resolvable. Use DEBUG_R=1 to surface R stderr during failures. `RSCRIPT_TIMEOUT_SEC` controls R subprocess timeouts.
 - What to test:
   - Python utils in /utils (validators, security wrappers, error handling, health checks).
   - MCP server in /server.py (tools/list and tools/call flows).
