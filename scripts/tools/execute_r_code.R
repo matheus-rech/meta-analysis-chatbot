@@ -1,78 +1,84 @@
 # scripts/tools/execute_r_code.R
 
-# Safely execute arbitrary R code and capture results, output, and plots.
-execute_r_code <- function(args) {
-  required_args <- c("r_code")
-  if (!all(required_args %in% names(args))) {
-    return(list(status = "error", message = "Missing required argument: r_code"))
-  }
+# Ensure required packages are available
+if (!requireNamespace("base64enc", quietly = TRUE)) {
+  install.packages("base64enc", repos = "https://cloud.r-project.org")
+}
+if (!requireNamespace("evaluate", quietly = TRUE)) {
+  install.packages("evaluate", repos = "https://cloud.r-project.org")
+}
 
-  r_code <- args$r_code
+execute_r_code <- function(args) {
+  code_to_execute <- args$code
   session_path <- args$session_path
 
-  # Create a temporary file for the plot
-  plot_path <- tempfile(tmpdir = file.path(session_path, "results"), fileext = ".png")
+  if (is.null(code_to_execute) || !is.character(code_to_execute) || length(code_to_execute) != 1) {
+    return(list(status = "error", message = "No 'code' argument provided or it is not a single string."))
+  }
 
-  stdout_capture <- c()
-  warnings_capture <- c()
-  error_capture <- NULL
-  result_val <- NULL
+  # Ensure the tmp directory exists
+  tmp_dir <- file.path(session_path, "tmp")
+  dir.create(tmp_dir, showWarnings = FALSE, recursive = TRUE)
+  plot_path <- tempfile(pattern = "r_plot_", tmpdir = tmp_dir, fileext = ".png")
 
-  # Use a custom environment to avoid polluting the global one
+  # Use a clean environment for execution
   exec_env <- new.env(parent = .GlobalEnv)
 
-  # Open a PNG device to capture any plots
-  png(filename = plot_path, width = 8, height = 6, units = "in", res = 300)
+  # Variables to store outputs
+  output_text <- ""
+  warnings_text <- c()
+  errors_text <- c()
+  plot_data <- NULL
 
-  # Use tryCatch to handle everything
-  execution_result <- tryCatch({
-    # Capture stdout and warnings
-    stdout_capture <- capture.output({
-      result_val <- withCallingHandlers(
-        eval(parse(text = r_code), envir = exec_env),
-        warning = function(w) {
-          warnings_capture <<- c(warnings_capture, conditionMessage(w))
-          invokeRestart("muffleWarning")
+  # Custom output handler for the evaluate function
+  output_handler <- evaluate::new_output_handler(
+    text = function(o) {
+      output_text <<- paste(output_text, o, sep = "")
+    },
+    graphics = function(p) {
+      # A plot was generated, save it
+      tryCatch({
+        png(plot_path, width = 8, height = 6, units = "in", res = 300)
+        print(p)
+      }, finally = {
+        if (grDevices::dev.cur() != 1) {
+          grDevices::dev.off()
         }
-      )
-    })
-
-    list(status = "success")
-  }, error = function(e) {
-    error_capture <<- conditionMessage(e)
-    list(status = "error")
-  })
-
-  # Always close the graphics device
-  dev.off()
-
-  # Check if a plot was actually created (file size > 0)
-  plot_b64 <- NULL
-  if (file.exists(plot_path) && file.info(plot_path)$size > 0) {
-    if (!requireNamespace("base64enc", quietly = TRUE)) {
-      install.packages("base64enc", repos = "https://cloud.r-project.org")
+      })
+    },
+    message = function(m) {
+      # Treat messages as regular output
+      output_text <<- paste(output_text, conditionMessage(m), sep = "")
+    },
+    warning = function(w) {
+      warnings_text <<- c(warnings_text, conditionMessage(w))
+    },
+    error = function(e) {
+      # Capture error message and stop execution
+      errors_text <<- c(errors_text, conditionMessage(e))
     }
-    plot_b64 <- base64enc::base64encode(plot_path)
+  )
+
+  # Use evaluate to run the code
+  evaluate::evaluate(code_to_execute, envir = exec_env, output_handler = output_handler)
+
+  # Check if a plot was created and encode it
+  if (file.exists(plot_path) && file.info(plot_path)$size > 0) {
+    plot_data <- base64enc::base64encode(plot_path)
   }
+
   # Clean up the temp plot file
-  if(file.exists(plot_path)) file.remove(plot_path)
+  if (file.exists(plot_path)) {
+    unlink(plot_path)
+  }
 
-  # Serialize the result to a string representation
-  result_str <- tryCatch({
-    # Use dput to get a reproducible representation of the R object
-    paste(capture.output(dput(result_val)), collapse = "\n")
-  }, error = function(e) {
-    "Result could not be serialized."
-  })
-
-  # Construct the final response
+  # Prepare the response
   response <- list(
-    status = if (is.null(error_capture)) "success" else "error",
-    stdout = paste(stdout_capture, collapse = "\n"),
-    warnings = paste(warnings_capture, collapse = "\n"),
-    error = error_capture,
-    returned_result = result_str,
-    plot = plot_b64
+    status = if (length(errors_text) > 0) "error" else "success",
+    stdout = trimws(output_text),
+    warnings = if(length(warnings_text) > 0) warnings_text else NULL,
+    error = if (length(errors_text) > 0) paste(errors_text, collapse = "\n") else NULL,
+    plot = plot_data
   )
 
   return(response)

@@ -71,35 +71,6 @@ jobs:
       #   id: login-ecr
       #   uses: aws-actions/amazon-ecr-login@v2
 
-      - name: Sanitize branch name for Docker tag
-        id: branch
-        run: |
-          # Get branch name and sanitize it for Docker tag use
-          if [ "${{ github.event_name }}" = "pull_request" ]; then
-            BRANCH_NAME="${{ github.head_ref }}"
-          else
-            BRANCH_NAME="${{ github.ref_name }}"
-          fi
-          
-          # Sanitize branch name: lowercase, replace invalid chars with dash, remove leading/trailing dashes
-          CLEAN_BRANCH=$(echo "$BRANCH_NAME" | tr '[:upper:]' '[:lower:]' | sed 's/[^a-z0-9._-]/-/g' | sed 's/^-\+\|-\+$//g' | sed 's/-\+/-/g')
-          
-          # Ensure we have a valid branch name, fallback to 'unknown' if empty
-          if [ -z "$CLEAN_BRANCH" ] || [ "$CLEAN_BRANCH" = "-" ]; then
-            CLEAN_BRANCH="unknown"
-          fi
-          
-          # Limit length to 63 characters (Docker tag limit) and ensure no trailing dash
-          CLEAN_BRANCH=$(echo "$CLEAN_BRANCH" | cut -c1-63 | sed 's/-$//g')
-          
-          # Final check: if we ended up with empty string after trimming, use fallback
-          if [ -z "$CLEAN_BRANCH" ]; then
-            CLEAN_BRANCH="unknown"
-          fi
-          
-          echo "original=$BRANCH_NAME" >> $GITHUB_OUTPUT
-          echo "sanitized=$CLEAN_BRANCH" >> $GITHUB_OUTPUT
-
       - name: Extract metadata
         id: meta
         uses: docker/metadata-action@v5
@@ -112,28 +83,7 @@ jobs:
             type=semver,pattern={{version}}
             type=semver,pattern={{major}}.{{minor}}
             type=raw,value=latest,enable={{is_default_branch}}
-            type=raw,value=${{ github.event.inputs.image_tag || 'latest' }},enable=${{ github.event.inputs.image_tag != '' }}
-            type=raw,value=${{ steps.branch.outputs.sanitized }}-{{sha}},enable=${{ steps.branch.outputs.sanitized != '' }}
-          flavor: |
-            latest=auto
-
-      - name: Debug metadata output
-        run: |
-          echo "Branch info:"
-          echo "  Original: ${{ steps.branch.outputs.original }}"
-          echo "  Sanitized: ${{ steps.branch.outputs.sanitized }}"
-          echo ""
-          echo "Generated tags:"
-          echo "${{ steps.meta.outputs.tags }}"
-          echo ""
-          echo "Generated labels:"
-          echo "${{ steps.meta.outputs.labels }}"
-          echo ""
-          echo "Event context:"
-          echo "  Event name: ${{ github.event_name }}"
-          echo "  Ref name: ${{ github.ref_name }}"
-          echo "  Head ref: ${{ github.head_ref }}"
-          echo "  Is default branch: ${{ github.ref == 'refs/heads/main' }}"
+            type=raw,value=${{ github.event.inputs.image_tag || 'latest' }}
 
       - name: Build and push Docker image
         id: docker_build
@@ -141,19 +91,12 @@ jobs:
         with:
           context: .
           file: ./Dockerfile.chatbot
-          # Use single platform for PR builds (when loading locally), multi-platform for pushes
-          platforms: ${{ github.event_name == 'pull_request' && 'linux/amd64' || 'linux/amd64,linux/arm64' }}
-          # Push to registry for main branch pushes and releases, load locally for PRs
-          push: ${{ github.event_name != 'pull_request' }}
-          load: ${{ github.event_name == 'pull_request' }}
+          platforms: linux/amd64,linux/arm64
+          push: true
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
-          build-args: |
-            BUILD_DATE=${{ github.event.head_commit.timestamp }}
-            VCS_REF=${{ github.sha }}
-            VERSION=${{ steps.meta.outputs.version }}
 
       - name: Generate SBOM
         uses: anchore/sbom-action@v0
