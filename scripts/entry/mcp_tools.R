@@ -31,6 +31,7 @@ source(file.path(scripts_root, "tools", "generate_forest_plot.R"))
 source(file.path(scripts_root, "tools", "assess_publication_bias.R"))
 source(file.path(scripts_root, "tools", "generate_report.R"))
 source(file.path(scripts_root, "tools", "get_session_status.R"))
+source(file.path(scripts_root, "tools", "execute_r_code.R"))
 cochrane_path <- file.path(scripts_root, "adapters", "cochrane_guidance.R")
 if (file.exists(cochrane_path)) {
   source(cochrane_path)
@@ -121,6 +122,8 @@ result <- tryCatch({
     generate_report(json_args)
   } else if (tool_name == "get_session_status") {
     get_session_status(json_args)
+  } else if (tool_name == "execute_r_code") {
+    execute_r_code(json_args)
   } else {
     list(status = "error", message = paste("Unknown tool:", tool_name))
   }

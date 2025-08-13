@@ -9,8 +9,12 @@ import subprocess
 import base64
 import glob
 import re
+import sys
 import tempfile
 import threading
+import atexit
+import subprocess
+import uuid
 from typing import Optional, List, Dict, Any, Tuple
 from datetime import datetime
 from pathlib import Path
@@ -70,6 +74,8 @@ You can process:
 - Images of charts/figures for interpretation
 - Audio recordings of research discussions
 
+You have a powerful R code interpreter (`execute_r_code`) for custom tasks.
+
 Available tools:
 1. initialize_meta_analysis - Start a new analysis session
 2. upload_study_data - Upload data for analysis
@@ -80,6 +86,7 @@ Available tools:
 7. get_current_session_id - Get the active session ID
 8. extract_pdf_data - Extract data from PDF papers
 9. analyze_figure - Analyze chart/figure images
+10. execute_r_code - Execute arbitrary R code for custom analysis, data manipulation, or plotting. Use this powerful tool when other tools are insufficient.
 
 Always:
 - Explain statistical concepts clearly
@@ -125,6 +132,9 @@ class GenerateReportInput(BaseModel):
     session_id: Optional[str] = Field(description="Session ID. If None, uses the active session.", default=None)
     format: str = Field(default="html", description="Format: html, pdf, or word")
     include_code: bool = Field(default=False, description="Include R code in report")
+
+class ExecuteRCodeInput(BaseModel):
+    r_code: str = Field(description="A string of R code to be executed in the current session context.")
 
 # =====================================================================================
 #  File Management Functions
@@ -201,82 +211,99 @@ def delete_selected_files(files_to_delete: list, current_filter: list):
     return update_file_list_display(current_filter)
 
 # =====================================================================================
-#  Unified MCP Backend for R Integration
+#  MCP Client for Server Communication
 # =====================================================================================
 
-class UnifiedMCPBackend:
-    """
-    Unified backend to handle all R script executions with MCP tools.
-    Serves both the multimodal interface and direct tool access.
-    """
+class MCPClient:
+    """Client for communicating with the standalone MCP server process."""
+
     def __init__(self):
-        self.sessions: Dict[str, Dict] = {}
+        self._lock = threading.Lock()
         self.current_session_id: Optional[str] = None
-        self.scripts_path = Path(__file__).parent / "scripts"
-        self.mcp_tools_path = self.scripts_path / "entry" / "mcp_tools.R"
-        
-        if not self.mcp_tools_path.exists():
-            alt_path = Path("/app/scripts/entry/mcp_tools.R")
-            if alt_path.exists():
-                self.scripts_path = Path("/app/scripts")
-                self.mcp_tools_path = alt_path
-            else:
-                raise FileNotFoundError(f"R scripts not found at {self.mcp_tools_path}")
+        self.sessions: Dict[str, Dict] = {}
 
-    def execute_r_tool(self, tool_name: str, args: Dict[str, Any]) -> Dict[str, Any]:
-        """Executes an R tool script, handling arguments and session management."""
-        session_id = args.get("session_id") or self.current_session_id
-        session_path = self.sessions.get(session_id, {}).get("path") if session_id else None
-        if not session_path:
-            session_path = tempfile.mkdtemp(prefix="meta_analysis_")
 
-        fd, args_file = tempfile.mkstemp(suffix=".json")
-        os.close(fd)
-        with open(args_file, "w", encoding="utf-8") as f:
-            json.dump(args, f)
+    def call_tool(self, tool_name: str, args: Dict[str, Any]) -> Dict[str, Any]:
+        """Sends a tool call request to the MCP server and gets the result."""
+        global mcp_server_process
+        if mcp_server_process is None or mcp_server_process.poll() is not None:
+            # Attempt to restart the server if it has died
+            print("MCP server process not found. Attempting to restart...")
+            start_mcp_server()
+            if mcp_server_process is None or mcp_server_process.poll() is not None:
+                 return {"status": "error", "error": "MCP server is not running and could not be restarted."}
 
-        rscript = os.getenv("RSCRIPT_BIN", "Rscript")
-        timeout = int(os.getenv("RSCRIPT_TIMEOUT_SEC", "300"))
-        debug_r = os.getenv("DEBUG_R") == "1"
+        request_id = str(uuid.uuid4())
+        # Ensure session_id is passed if available
+        if "session_id" not in args and self.current_session_id:
+            args["session_id"] = self.current_session_id
 
-        try:
-            result = subprocess.run(
-                [rscript, "--vanilla", str(self.mcp_tools_path), tool_name, args_file, session_path],
-                capture_output=True, text=True, encoding="utf-8", timeout=timeout
-            )
-        finally:
-            if os.path.exists(args_file):
-                os.remove(args_file)
+        request = {
+            "jsonrpc": "2.0",
+            "method": "tools/call",
+            "params": {"name": tool_name, "arguments": args},
+            "id": request_id,
+        }
 
-        if result.returncode != 0:
-            error_info = {"status": "error", "error": "R script failed"}
-            if debug_r:
-                error_info["stderr"] = (result.stderr or "").strip()
-                error_info["stdout"] = (result.stdout or "").strip()
-            return error_info
+        with self._lock:
+            try:
+                # Write request
+                mcp_server_process.stdin.write(json.dumps(request) + "\n")
+                mcp_server_process.stdin.flush()
 
-        try:
-            return json.loads(result.stdout.strip())
-        except json.JSONDecodeError:
-            return {"status": "error", "error": "Invalid JSON from R", "raw_output": (result.stdout or "").strip()}
+                # Read response
+                response_line = mcp_server_process.stdout.readline()
+                if not response_line:
+                    stderr_output = ""
+                    if mcp_server_process.stderr:
+                        stderr_output = mcp_server_process.stderr.read()
+                    return {"status": "error", "error": "Empty response from MCP server.", "details": stderr_output}
 
-    # --- Tool Methods for LangChain Agent ---
+                response = json.loads(response_line)
+
+                if response.get("id") != request_id:
+                    return {"status": "error", "error": "Mismatched response ID from MCP server."}
+
+                if "error" in response:
+                    return {"status": "error", "error": response["error"]}
+
+                content = response.get("result", {}).get("content", [{}])[0]
+                if content.get("type") == "text":
+                    # The actual result from the R script is a JSON string in the 'text' field.
+                    return json.loads(content.get("text", "{}"))
+                else:
+                    return {"status": "error", "error": "Unsupported content type from MCP server."}
+
+            except (IOError, json.JSONDecodeError) as e:
+                error_details = ""
+                if mcp_server_process and mcp_server_process.stderr:
+                    try:
+                        error_details = mcp_server_process.stderr.read()
+                    except IOError:
+                        pass
+                return {
+                    "status": "error",
+                    "error": f"Failed to communicate with MCP server: {e}",
+                    "details": error_details
+                }
+
+    # --- Tool Methods for LangChain Agent (Adapted from UnifiedMCPBackend) ---
 
     def initialize_meta_analysis(self, name: str, study_type: str, effect_measure: str, analysis_model: str) -> str:
         """Initialize a new meta-analysis session."""
-        result = self.execute_r_tool("initialize_meta_analysis", {
-            "name": name, "study_type": study_type, 
+        result = self.call_tool("initialize_meta_analysis", {
+            "name": name, "study_type": study_type,
             "effect_measure": effect_measure, "analysis_model": analysis_model
         })
         if result.get("status") == "success" and "session_id" in result:
             session_id = result["session_id"]
             self.current_session_id = session_id
             self.sessions[session_id] = {
-                "name": name, 
+                "name": name,
                 "path": result.get("session_path", tempfile.mkdtemp(prefix=f"meta_{session_id}_")),
                 "config": {
-                    "study_type": study_type, 
-                    "effect_measure": effect_measure, 
+                    "study_type": study_type,
+                    "effect_measure": effect_measure,
                     "analysis_model": analysis_model
                 }
             }
@@ -288,20 +315,19 @@ class UnifiedMCPBackend:
         active_session_id = session_id or self.current_session_id
         if not active_session_id:
             return "❌ Error: No active session. Please initialize a meta-analysis first."
-        
-        # Encode CSV content if not already encoded
+
         if not csv_content.startswith("data:"):
             encoded_data = base64.b64encode(csv_content.encode()).decode()
         else:
             encoded_data = csv_content
-            
-        result = self.execute_r_tool("upload_study_data", {
-            "session_id": active_session_id, 
+
+        result = self.call_tool("upload_study_data", {
+            "session_id": active_session_id,
             "data_content": encoded_data,
-            "data_format": "csv", 
+            "data_format": "csv",
             "validation_level": validation_level
         })
-        
+
         if result.get("status") == "success":
             return f"✅ Data uploaded successfully!\n\nStudies: {result.get('n_studies', 'N/A')}\nValidation: {result.get('validation_summary', 'Passed')}"
         return f"❌ Upload failed: {result.get('error', 'Unknown error')}"
@@ -311,10 +337,10 @@ class UnifiedMCPBackend:
         active_session_id = session_id or self.current_session_id
         if not active_session_id:
             return "❌ Error: No active session."
-        
+
         args = {"session_id": active_session_id, **kwargs}
-        result = self.execute_r_tool("perform_meta_analysis", args)
-        
+        result = self.call_tool("perform_meta_analysis", args)
+
         if result.get("status") == "success":
             summary = result.get("summary", {})
             return f"""✅ Meta-analysis completed!
@@ -337,10 +363,10 @@ class UnifiedMCPBackend:
         active_session_id = session_id or self.current_session_id
         if not active_session_id:
             return "❌ Error: No active session."
-            
+
         args = {"session_id": active_session_id, **kwargs}
-        result = self.execute_r_tool("generate_forest_plot", args)
-        
+        result = self.call_tool("generate_forest_plot", args)
+
         if result.get("status") == "success":
             plot_data = result.get("plot", "")
             if plot_data:
@@ -353,13 +379,13 @@ class UnifiedMCPBackend:
         active_session_id = session_id or self.current_session_id
         if not active_session_id:
             return "❌ Error: No active session."
-        
+
         if methods is None:
             methods = ["funnel_plot", "egger_test"]
-            
+
         args = {"session_id": active_session_id, "methods": methods}
-        result = self.execute_r_tool("assess_publication_bias", args)
-        
+        result = self.call_tool("assess_publication_bias", args)
+
         if result.get("status") == "success":
             tests = result.get("tests", {})
             return f"""✅ Publication bias assessment completed!
@@ -380,10 +406,10 @@ class UnifiedMCPBackend:
         active_session_id = session_id or self.current_session_id
         if not active_session_id:
             return "❌ Error: No active session."
-        
+
         args = {"session_id": active_session_id, **kwargs}
-        result = self.execute_r_tool("generate_report", args)
-        
+        result = self.call_tool("generate_report", args)
+
         if result.get("status") == "success":
             report_path = result.get("report_path", "")
             return f"✅ Report generated successfully!\n\nFormat: {kwargs.get('format', 'html').upper()}\nLocation: {report_path}"
@@ -394,7 +420,33 @@ class UnifiedMCPBackend:
         if self.current_session_id:
             return f"Current session ID: {self.current_session_id}"
         return "No active session. Please use 'initialize_meta_analysis' to start."
-    
+
+    def execute_r_code(self, r_code: str) -> str:
+        """Executes arbitrary R code and returns the result."""
+        result = self.call_tool("execute_r_code", {"r_code": r_code})
+
+        if result.get("status") == "error":
+            return f"""❌ R Code Execution Failed:
+Error: {result.get('error', 'Unknown error')}
+"""
+
+        response_parts = ["✅ R Code Executed Successfully:"]
+        # Order is important for clear output
+        if result.get("stdout") and result['stdout'].strip():
+            response_parts.append(f"**Console Output:**\n```\n{result['stdout'].strip()}\n```")
+        if result.get("returned_result") and result['returned_result'].strip() != "NULL":
+            response_parts.append(f"**Returned Result:**\n```R\n{result['returned_result'].strip()}\n```")
+        if result.get("warnings") and result['warnings'].strip():
+            response_parts.append(f"**Warnings:**\n```\n{result['warnings'].strip()}\n```")
+        if result.get("plot"):
+            response_parts.append(f"**Generated Plot:**\n![R Plot](data:image/png;base64,{result['plot']})")
+
+        # If nothing was produced besides success, say so.
+        if len(response_parts) == 1:
+            return "✅ R code executed successfully with no output, return value, or plot."
+
+        return "\n\n".join(response_parts)
+
     def extract_pdf_data(self, pdf_path: str) -> dict:
         """Extract text and metadata from PDF"""
         try:
@@ -405,50 +457,47 @@ class UnifiedMCPBackend:
                 "title": reader.metadata.title if reader.metadata else None,
                 "author": reader.metadata.author if reader.metadata else None
             }
-            
+
             for page in reader.pages:
                 text += page.extract_text() + "\n"
-            
-            # Look for common meta-analysis data patterns
+
             patterns = {
                 "sample_sizes": r"n\s*=\s*(\d+)",
                 "effect_sizes": r"(?:OR|RR|MD|SMD|HR)\s*=\s*([\d.]+)",
                 "confidence_intervals": r"CI\s*[:=]\s*\[([\d.]+),\s*([\d.]+)\]",
                 "p_values": r"p\s*[<>=]\s*([\d.]+)"
             }
-            
+
             extracted_data = {}
             for name, pattern in patterns.items():
                 matches = re.findall(pattern, text, re.IGNORECASE)
                 if matches:
                     extracted_data[name] = matches
-            
+
             return {
                 "status": "success",
-                "text": text[:5000],  # First 5000 chars for context
+                "text": text[:5000],
                 "metadata": metadata,
                 "extracted_data": extracted_data
             }
         except Exception as e:
             return {"status": "error", "error": f"PDF extraction failed: {str(e)}"}
-    
+
     def analyze_figure(self, image_path: str) -> dict:
         """Analyze figure/chart from image"""
         try:
             img = Image.open(image_path)
-            
-            # Basic image analysis
+
             analysis = {
                 "dimensions": img.size,
                 "mode": img.mode,
                 "format": img.format
             }
-            
-            # Convert to base64 for potential API processing
+
             buffered = BytesIO()
             img.save(buffered, format="PNG")
             img_base64 = base64.b64encode(buffered.getvalue()).decode()
-            
+
             return {
                 "status": "success",
                 "analysis": analysis,
@@ -457,6 +506,8 @@ class UnifiedMCPBackend:
             }
         except Exception as e:
             return {"status": "error", "error": f"Image analysis failed: {str(e)}"}
+
+
 
 # =====================================================================================
 #  LLM Integration
@@ -509,7 +560,7 @@ def handle_multimodal_submit(message: dict, history: list, model_name: str, shou
     
     try:
         # Initialize backend and LLM
-        backend = UnifiedMCPBackend()
+        backend = MCPClient()
         llm = get_llm_client(model_name)
         
         # Process any attached files
@@ -590,6 +641,12 @@ def handle_multimodal_submit(message: dict, history: list, model_name: str, shou
                 func=backend.get_current_session_id,
                 name="get_current_session_id",
                 description="Get the current active session ID"
+            ),
+            StructuredTool.from_function(
+                func=backend.execute_r_code,
+                name="execute_r_code",
+                description="Execute arbitrary R code for custom analysis or plotting. Use this for tasks not covered by other tools, like generating custom plots with ggplot2 or performing non-standard calculations.",
+                args_schema=ExecuteRCodeInput
             )
         ]
         
@@ -793,6 +850,54 @@ with gr.Blocks(
     )
 
 # =====================================================================================
+#  MCP Server Management
+# =====================================================================================
+
+mcp_server_process = None
+
+def start_mcp_server():
+    """Starts the MCP server as a background process."""
+    global mcp_server_process
+    if mcp_server_process is None or mcp_server_process.poll() is not None:
+        print("Starting MCP server...")
+        try:
+            mcp_server_process = subprocess.Popen(
+                [sys.executable, "server.py"],
+                stdin=subprocess.PIPE,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+                text=True,
+                encoding='utf-8',
+                bufsize=1  # Line-buffered
+            )
+            print(f"MCP server started with PID: {mcp_server_process.pid}")
+        except FileNotFoundError:
+            print("ERROR: `server.py` not found. Make sure it is in the same directory.")
+            raise
+        except Exception as e:
+            print(f"ERROR: Failed to start MCP server: {e}")
+            raise
+
+def stop_mcp_server():
+    """Stops the MCP server process."""
+    global mcp_server_process
+    if mcp_server_process and mcp_server_process.poll() is None:
+        print("Stopping MCP server...")
+        mcp_server_process.terminate()
+        try:
+            mcp_server_process.wait(timeout=5)
+            print("MCP server stopped.")
+        except subprocess.TimeoutExpired:
+            print("MCP server did not terminate in time, killing it.")
+            mcp_server_process.kill()
+            print("MCP server killed.")
+        mcp_server_process = None
+
+# Register the stop function to be called on exit
+atexit.register(stop_mcp_server)
+
+
+# =====================================================================================
 #  Launch Configuration
 # =====================================================================================
 
@@ -806,6 +911,9 @@ if __name__ == "__main__":
     Path("outputs").mkdir(exist_ok=True)
     Path("sessions").mkdir(exist_ok=True)
     
+    # Start the MCP server
+    start_mcp_server()
+
     # Launch the app
     demo.launch(
         server_name=os.getenv("GRADIO_SERVER_NAME", "0.0.0.0"),
