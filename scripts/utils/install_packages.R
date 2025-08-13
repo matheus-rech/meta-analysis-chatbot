@@ -8,7 +8,8 @@ cat("Installing required R packages for Meta-Analysis MCP Server...\n\n")
 required_packages <- c(
   "jsonlite",   # For JSON handling
   "metafor",    # For meta-analysis calculations
-  "ggplot2"     # For advanced visualizations
+  "ggplot2",     # For advanced visualizations
+  "base64enc"  # For encoding plots
 )
 
 # Function to install packages if not already installed
