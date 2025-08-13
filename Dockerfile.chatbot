@@ -22,7 +22,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 WORKDIR /app
 
 # Copy requirements
-COPY poc/gradio-mcp/requirements-chatbot.txt ./requirements.txt
+COPY requirements-chatbot.txt ./requirements.txt
 
 # Create and activate virtual environment
 RUN python3 -m venv /opt/venv
@@ -33,9 +33,9 @@ RUN pip install --no-cache-dir --upgrade pip setuptools wheel && \
     pip install --no-cache-dir -r requirements.txt
 
 # Copy application files
-COPY poc/gradio-mcp/chatbot_app.py ./chatbot_app.py
-COPY poc/gradio-mcp/chatbot_langchain.py ./chatbot_langchain.py
-COPY poc/gradio-mcp/server.py ./server.py
+COPY chatbot_app.py ./chatbot_app.py
+COPY chatbot_langchain.py ./chatbot_langchain.py
+COPY server.py ./server.py
 COPY scripts ./scripts
 COPY templates ./templates
 
