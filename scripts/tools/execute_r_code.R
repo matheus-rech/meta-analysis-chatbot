@@ -42,7 +42,15 @@ execute_r_code <- function(args) {
         print(p)
       }, finally = {
         if (grDevices::dev.cur() != 1) {
-          grDevices::dev.off()
+      dev_prev <- grDevices::dev.cur()
+      tryCatch({
+        png(plot_path, width = 8, height = 6, units = "in", res = 300)
+        dev_png <- grDevices::dev.cur()
+        print(p)
+      }, finally = {
+        # Close the PNG device if it is still open
+        if (exists("dev_png") && grDevices::dev.cur() == dev_png) {
+          grDevices::dev.off(dev_png)
         }
       })
     },
