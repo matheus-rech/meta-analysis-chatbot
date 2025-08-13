@@ -868,7 +868,7 @@ def start_mcp_server():
                 stderr=subprocess.PIPE,
                 text=True,
                 encoding='utf-8',
-                bufsize=1  # Line-buffered
+                bufsize=0  # Unbuffered for reliable stdin communication
             )
             print(f"MCP server started with PID: {mcp_server_process.pid}")
         except FileNotFoundError:
