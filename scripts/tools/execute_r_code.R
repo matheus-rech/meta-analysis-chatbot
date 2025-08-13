@@ -49,6 +49,9 @@ execute_r_code <- function(args) {
   # Check if a plot was actually created (file size > 0)
   plot_b64 <- NULL
   if (file.exists(plot_path) && file.info(plot_path)$size > 0) {
+    if (!requireNamespace("base64enc", quietly = TRUE)) {
+      install.packages("base64enc", repos = "https://cloud.r-project.org")
+    }
     plot_b64 <- base64enc::base64encode(plot_path)
   }
   # Clean up the temp plot file
