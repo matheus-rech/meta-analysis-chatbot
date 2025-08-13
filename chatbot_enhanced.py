@@ -231,7 +231,7 @@ class MCPClient:
             print("MCP server process not found. Attempting to restart...")
             start_mcp_server()
             if mcp_server_process is None or mcp_server_process.poll() is not None:
-                 return {"status": "error", "error": "MCP server is not running and could not be restarted."}
+                return {"status": "error", "error": "MCP server is not running and could not be restarted."}
 
         request_id = str(uuid.uuid4())
         # Ensure session_id is passed if available
