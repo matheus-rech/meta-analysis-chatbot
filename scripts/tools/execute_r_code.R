@@ -39,23 +39,16 @@ execute_r_code <- function(args) {
       # A plot was generated, save it
       tryCatch({
         png(plot_path, width = 8, height = 6, units = "in", res = 300)
-        tryCatch(
-          print(p),
-          error = function(e) {
-            errors_text <<- c(errors_text, paste("Error printing plot:", conditionMessage(e)))
-          }
-        )
-      }, finally = {
-        if (grDevices::dev.cur() != 1) {
-      dev_prev <- grDevices::dev.cur()
-      tryCatch({
-        png(plot_path, width = 8, height = 6, units = "in", res = 300)
-        dev_png <- grDevices::dev.cur()
         print(p)
       }, finally = {
-        # Close the PNG device if it is still open
-        if (exists("dev_png") && grDevices::dev.cur() == dev_png) {
-          grDevices::dev.off(dev_png)
+      device_opened <- FALSE
+      tryCatch({
+        png(plot_path, width = 8, height = 6, units = "in", res = 300)
+        device_opened <- TRUE
+        print(p)
+      }, finally = {
+        if (device_opened) {
+          grDevices::dev.off()
         }
       })
     },
