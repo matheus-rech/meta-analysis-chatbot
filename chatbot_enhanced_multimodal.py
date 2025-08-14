@@ -323,7 +323,12 @@ class MCPClient:
         if not active_session_id:
             return "❌ Error: No active session. Please initialize a meta-analysis first."
 
-        if not csv_content.startswith("data:"):
+        import re
+
+        # Regex to match data URIs with base64 encoding
+        data_uri_base64_pattern = r'^data:.*;base64,.*'
+
+        if not re.match(data_uri_base64_pattern, csv_content):
             encoded_data = base64.b64encode(csv_content.encode()).decode()
         else:
             encoded_data = csv_content
