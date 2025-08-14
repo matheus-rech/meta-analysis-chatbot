@@ -41,7 +41,13 @@ execute_r_code <- function(args) {
         png(plot_path, width = 8, height = 6, units = "in", res = 300)
         print(p)
       }, finally = {
-        if (grDevices::dev.cur() != 1) {
+      device_opened <- FALSE
+      tryCatch({
+        png(plot_path, width = 8, height = 6, units = "in", res = 300)
+        device_opened <- TRUE
+        print(p)
+      }, finally = {
+        if (device_opened) {
           grDevices::dev.off()
         }
       })
