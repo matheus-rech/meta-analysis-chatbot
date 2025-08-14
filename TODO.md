@@ -18,4 +18,5 @@ The backend has been refactored to use a client-server architecture with a stand
     *   Use the new tool wrapper functions.
     *   Include the new `execute_r_code` tool in the list of tools available to the LangChain agent.
 
+
 5.  **Update Main Execution Block:** The `if __name__ == "__main__":` block should be updated to call the `start_mcp_server` function on startup.

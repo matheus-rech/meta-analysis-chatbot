@@ -9,7 +9,8 @@ required_packages <- c(
   "jsonlite",   # For JSON handling
   "metafor",    # For meta-analysis calculations
   "ggplot2",     # For advanced visualizations
-  "base64enc"  # For encoding plots
+  "base64enc",  # For encoding plots
+  "evaluate"    # For safe R code execution
 )
 
 # Function to install packages if not already installed

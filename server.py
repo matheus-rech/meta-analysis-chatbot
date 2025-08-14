@@ -132,7 +132,9 @@ def call_tool_resp(request_id, name: str, arguments: Dict[str, Any]):
         os.makedirs(session_path, exist_ok=True)
 
     try:
+        print(f"Executing R tool: {name}", file=sys.stderr)
         result = execute_r(name, arguments, session_path)
+        print(f"R tool {name} finished.", file=sys.stderr)
         # Ensure init returns session identifiers
         if name == 'initialize_meta_analysis':
             if isinstance(result, dict):
@@ -144,6 +146,7 @@ def call_tool_resp(request_id, name: str, arguments: Dict[str, Any]):
             'result': {'content': [{'type': 'text', 'text': json.dumps(result)}]},
         }
     except Exception as e:
+        print(f"Error executing R tool {name}: {e}", file=sys.stderr)
         return {
             'jsonrpc': '2.0',
             'id': request_id,

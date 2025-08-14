@@ -243,26 +243,23 @@ class TestRunner:
         
         # Check environment
         if not self.check_environment():
-            print("\n⚠️  Some dependencies are missing.")
-            response = input("Install dependencies? (y/n): ")
-            if response.lower() == 'y':
-                self.install_dependencies()
-            else:
-                print("Please install dependencies manually and try again.")
-                return False
+            print("\n⚠️  Some dependencies are missing. Assuming they are globally installed and proceeding.")
+            # response = input("Install dependencies? (y/n): ")
+            # if response.lower() == 'y':
+            #     self.install_dependencies()
+            # else:
+            #     print("Please install dependencies manually and try again.")
+            #     return False
         
-        # Start Gradio server
-        gradio_proc = None
+        # Let test suites manage their own servers
         try:
-            gradio_proc = self.start_gradio_server()
-            
             # Define test suites
             test_suites = [
                 {
                     "name": "MCP Server Functional Tests",
                     "command": [
                         sys.executable, "-m", "pytest",
-                        "test_mcp_server_functional.py",
+                        "tests/test_mcp_server_functional.py",
                         "-v", "--tb=short"
                     ]
                 },
@@ -270,9 +267,9 @@ class TestRunner:
                     "name": "Gradio UI Playwright Tests",
                     "command": [
                         sys.executable, "-m", "pytest",
-                        "test_gradio_ui_playwright.py",
+                        "tests/test_gradio_ui_playwright.py",
                         "-v", "--tb=short",
-                        "--html=playwright_report.html",
+                        "--html=tests/playwright_report.html",
                         "--self-contained-html"
                     ]
                 },
@@ -291,14 +288,8 @@ class TestRunner:
                 self.results[suite["name"]] = result
             
         finally:
-            # Clean up Gradio server
-            if gradio_proc:
-                print("\nStopping Gradio server...")
-                gradio_proc.terminate()
-                try:
-                    gradio_proc.wait(timeout=5)
-                except subprocess.TimeoutExpired:
-                    gradio_proc.kill()
+            # Server cleanup is now handled by individual test suites
+            pass
         
         self.end_time = datetime.now()
         

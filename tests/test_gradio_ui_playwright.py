@@ -8,6 +8,8 @@ import pytest
 import json
 import os
 import time
+import sys
+import subprocess
 from pathlib import Path
 from typing import Dict, List, Any
 from playwright.sync_api import Page, expect
@@ -75,10 +77,45 @@ PHQ2021,12.4,3.2,55,16.8,3.5,57,PHQ-9"""
 }
 
 
+@pytest.fixture(scope="session")
+def gradio_server():
+    """Fixture to start the Gradio server for the test session."""
+    project_root = Path(__file__).parent.parent
+    server_path = project_root / "chatbot_enhanced.py"
+
+    env = os.environ.copy()
+    env["PYTHONUNBUFFERED"] = "1"
+    env["TEST_MODE"] = "1"
+    if "OPENAI_API_KEY" not in env and "ANTHROPIC_API_KEY" not in env:
+    ensure_api_keys(env)
+
+    proc = subprocess.Popen(
+        [sys.executable, str(server_path)],
+        env=env,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        text=True
+    )
+
+    # Wait for the server to be ready
+    print("Waiting for Gradio UI server to start...")
+    time.sleep(15)
+    print("Gradio UI server should be ready.")
+
+    yield proc
+
+    print("Stopping Gradio UI server...")
+    proc.terminate()
+    try:
+        proc.wait(timeout=5)
+    except subprocess.TimeoutExpired:
+        proc.kill()
+    print("Gradio UI server stopped.")
+
 class TestGradioMetaAnalysisUI:
     """Test suite for Gradio Meta-Analysis Chatbot UI"""
     
-    def test_ui_elements_present(self, page: Page):
+    def test_ui_elements_present(self, page: Page, gradio_server):
         """Test that all UI elements are present and accessible"""
         page.goto(TEST_CONFIG["base_url"])
         
@@ -98,7 +135,7 @@ class TestGradioMetaAnalysisUI:
         submit_button = page.locator("button:has-text('Submit')").first
         assert submit_button.is_visible()
     
-    def test_chatbot_basic_conversation(self, page: Page):
+    def test_chatbot_basic_conversation(self, page: Page, gradio_server):
         """Test basic chatbot conversation flow"""
         page.goto(TEST_CONFIG["base_url"])
         page.click("text=AI Chatbot")
@@ -122,7 +159,7 @@ class TestGradioMetaAnalysisUI:
         assert len(response_text) > 50  # Should have substantial response
         assert any(word in response_text.lower() for word in ["meta-analysis", "help", "assist", "study"])
     
-    def test_chatbot_meta_analysis_workflow(self, page: Page):
+    def test_chatbot_meta_analysis_workflow(self, page: Page, gradio_server):
         """Test complete meta-analysis workflow through chatbot"""
         page.goto(TEST_CONFIG["base_url"])
         page.click("text=AI Chatbot")
@@ -160,7 +197,7 @@ class TestGradioMetaAnalysisUI:
         chatbot_text = page.locator(".gradio-chatbot").inner_text()
         assert any(word in chatbot_text.lower() for word in ["effect", "confidence", "heterogeneity", "i-squared", "i²"])
     
-    def test_chatbot_educational_content(self, page: Page):
+    def test_chatbot_educational_content(self, page: Page, gradio_server):
         """Test chatbot's ability to provide educational content"""
         page.goto(TEST_CONFIG["base_url"])
         page.click("text=AI Chatbot")
@@ -189,7 +226,7 @@ class TestGradioMetaAnalysisUI:
         assert "odds ratio" in chatbot_text.lower()
         assert "risk ratio" in chatbot_text.lower()
     
-    def test_direct_tools_initialization(self, page: Page):
+    def test_direct_tools_initialization(self, page: Page, gradio_server):
         """Test direct tools tab initialization"""
         page.goto(TEST_CONFIG["base_url"])
         page.click("text=Direct Tools")
@@ -215,7 +252,7 @@ class TestGradioMetaAnalysisUI:
             output_text = page.inner_text()
             assert any(word in output_text.lower() for word in ["success", "initialized", "session"])
     
-    def test_direct_tools_data_upload(self, page: Page):
+    def test_direct_tools_data_upload(self, page: Page, gradio_server):
         """Test data upload in direct tools"""
         page.goto(TEST_CONFIG["base_url"])
         page.click("text=Direct Tools")
@@ -247,7 +284,7 @@ class TestGradioMetaAnalysisUI:
                     output_text = page.inner_text()
                     assert any(word in output_text.lower() for word in ["uploaded", "success", "studies"])
     
-    def test_performance_small_dataset(self, page: Page):
+    def test_performance_small_dataset(self, page: Page, gradio_server):
         """Test performance with small dataset"""
         page.goto(TEST_CONFIG["base_url"])
         page.click("text=AI Chatbot")
@@ -280,7 +317,7 @@ class TestGradioMetaAnalysisUI:
         chatbot_text = page.locator(".gradio-chatbot").inner_text()
         assert any(word in chatbot_text.lower() for word in ["effect", "confidence", "result"])
     
-    def test_performance_medium_dataset(self, page: Page):
+    def test_performance_medium_dataset(self, page: Page, gradio_server):
         """Test performance with medium dataset"""
         page.goto(TEST_CONFIG["base_url"])
         page.click("text=AI Chatbot")
@@ -308,7 +345,7 @@ class TestGradioMetaAnalysisUI:
         elapsed = time.time() - start_time
         assert elapsed < 45  # Should complete within 45 seconds
     
-    def test_performance_large_dataset(self, page: Page):
+    def test_performance_large_dataset(self, page: Page, gradio_server):
         """Test performance with large dataset"""
         page.goto(TEST_CONFIG["base_url"])
         page.click("text=AI Chatbot")
@@ -336,7 +373,7 @@ class TestGradioMetaAnalysisUI:
         elapsed = time.time() - start_time
         assert elapsed < 60  # Should complete within 60 seconds
     
-    def test_heterogeneity_detection(self, page: Page):
+    def test_heterogeneity_detection(self, page: Page, gradio_server):
         """Test heterogeneity detection with heterogeneous data"""
         page.goto(TEST_CONFIG["base_url"])
         page.click("text=AI Chatbot")
@@ -366,7 +403,7 @@ class TestGradioMetaAnalysisUI:
         # Should detect substantial heterogeneity
         assert any(term in chatbot_text.lower() for term in ["substantial", "considerable", "high", "moderate"])
     
-    def test_forest_plot_generation(self, page: Page):
+    def test_forest_plot_generation(self, page: Page, gradio_server):
         """Test forest plot generation"""
         page.goto(TEST_CONFIG["base_url"])
         page.click("text=AI Chatbot")
@@ -394,7 +431,7 @@ class TestGradioMetaAnalysisUI:
         chatbot_text = page.locator(".gradio-chatbot").inner_text()
         assert any(word in chatbot_text.lower() for word in ["forest", "plot", "generated", "created", "visualization"])
     
-    def test_publication_bias_assessment(self, page: Page):
+    def test_publication_bias_assessment(self, page: Page, gradio_server):
         """Test publication bias assessment"""
         page.goto(TEST_CONFIG["base_url"])
         page.click("text=AI Chatbot")
@@ -421,7 +458,7 @@ class TestGradioMetaAnalysisUI:
         chatbot_text = page.locator(".gradio-chatbot").inner_text()
         assert any(term in chatbot_text.lower() for term in ["bias", "egger", "begg", "funnel", "asymmetry"])
     
-    def test_error_handling_invalid_data(self, page: Page):
+    def test_error_handling_invalid_data(self, page: Page, gradio_server):
         """Test error handling with invalid data"""
         page.goto(TEST_CONFIG["base_url"])
         page.click("text=AI Chatbot")
@@ -444,7 +481,7 @@ class TestGradioMetaAnalysisUI:
         chatbot_text = page.locator(".gradio-chatbot").inner_text()
         assert any(word in chatbot_text.lower() for word in ["error", "invalid", "format", "problem", "issue"])
     
-    def test_error_handling_missing_session(self, page: Page):
+    def test_error_handling_missing_session(self, page: Page, gradio_server):
         """Test error handling when session is missing"""
         page.goto(TEST_CONFIG["base_url"])
         page.click("text=AI Chatbot")

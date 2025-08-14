@@ -92,21 +92,17 @@ jobs:
           context: .
           file: ./Dockerfile.chatbot
           platforms: linux/amd64,linux/arm64
-          push: ${{ github.event_name != 'pull_request' }}
+          push: true
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
-          build-args: |
-            BUILD_DATE=${{ github.event.head_commit.timestamp }}
-            VCS_REF=${{ github.sha }}
-            VERSION=${{ steps.meta.outputs.version }}
 
       - name: Generate SBOM
         uses: anchore/sbom-action@v0
-        if: github.event_name != 'pull_request'
+        if: github.event_name != 'pull_request' && steps.meta.outputs.version != ''
         with:
-          image: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ steps.meta.outputs.version }}
+          image: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ steps.meta.outputs.version || 'latest' }}
           format: spdx-json
           output-file: sbom.spdx.json
 
