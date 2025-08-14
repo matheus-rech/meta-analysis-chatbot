@@ -238,7 +238,7 @@ class MCPClient:
                     stderr=subprocess.PIPE,
                     text=True,
                     encoding='utf-8',
-                    bufsize=0  # Unbuffered for reliable stdin communication
+                    bufsize=1  # Line-buffered for reliable stdin communication
                 )
                 print(f"MCP server started with PID: {self.process.pid}")
             except FileNotFoundError:
