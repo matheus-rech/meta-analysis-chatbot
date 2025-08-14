@@ -215,26 +215,62 @@ def delete_selected_files(files_to_delete: list, current_filter: list):
 # =====================================================================================
 
 class MCPClient:
-    """Client for communicating with the standalone MCP server process."""
-
+    """
+    A self-contained client for managing and communicating with the standalone
+    MCP server process (`server.py`).
+    """
     def __init__(self):
         self._lock = threading.Lock()
+        self.process: Optional[subprocess.Popen] = None
         self.current_session_id: Optional[str] = None
         self.sessions: Dict[str, Dict] = {}
+        atexit.register(self.stop)
 
+    def start(self):
+        """Starts the MCP server as a background process."""
+        if self.process is None or self.process.poll() is not None:
+            print("Starting MCP server...")
+            try:
+                self.process = subprocess.Popen(
+                    [sys.executable, "server.py"],
+                    stdin=subprocess.PIPE,
+                    stdout=subprocess.PIPE,
+                    stderr=subprocess.PIPE,
+                    text=True,
+                    encoding='utf-8',
+                    bufsize=0  # Unbuffered for reliable stdin communication
+                )
+                print(f"MCP server started with PID: {self.process.pid}")
+            except FileNotFoundError:
+                print("ERROR: `server.py` not found. Make sure it is in the same directory.")
+                raise
+            except Exception as e:
+                print(f"ERROR: Failed to start MCP server: {e}")
+                raise
+
+    def stop(self):
+        """Stops the MCP server process."""
+        if self.process and self.process.poll() is None:
+            print("Stopping MCP server...")
+            self.process.terminate()
+            try:
+                self.process.wait(timeout=5)
+                print("MCP server stopped.")
+            except subprocess.TimeoutExpired:
+                print("MCP server did not terminate in time, killing it.")
+                self.process.kill()
+                print("MCP server killed.")
+            self.process = None
 
     def call_tool(self, tool_name: str, args: Dict[str, Any]) -> Dict[str, Any]:
         """Sends a tool call request to the MCP server and gets the result."""
-        global mcp_server_process
-        if mcp_server_process is None or mcp_server_process.poll() is not None:
-            # Attempt to restart the server if it has died
-            print("MCP server process not found. Attempting to restart...")
-            start_mcp_server()
-            if mcp_server_process is None or mcp_server_process.poll() is not None:
+        if self.process is None or self.process.poll() is not None:
+            print("MCP server process not running. Attempting to start...")
+            self.start()
+            if self.process is None or self.process.poll() is not None:
                 return {"status": "error", "error": "MCP server is not running and could not be restarted."}
 
         request_id = str(uuid.uuid4())
-        # Ensure session_id is passed if available
         if "session_id" not in args and self.current_session_id:
             args["session_id"] = self.current_session_id
 
@@ -247,47 +283,25 @@ class MCPClient:
 
         with self._lock:
             try:
-                # Write request
-                mcp_server_process.stdin.write(json.dumps(request) + "\n")
-                mcp_server_process.stdin.flush()
-
-                # Read response
-                response_line = mcp_server_process.stdout.readline()
+                self.process.stdin.write(json.dumps(request) + "\n")
+                self.process.stdin.flush()
+                response_line = self.process.stdout.readline()
                 if not response_line:
-                    stderr_output = ""
-                    if mcp_server_process.stderr:
-                        stderr_output = mcp_server_process.stderr.read()
+                    stderr_output = self.process.stderr.read() if self.process.stderr else ""
                     return {"status": "error", "error": "Empty response from MCP server.", "details": stderr_output}
-
                 response = json.loads(response_line)
-
                 if response.get("id") != request_id:
                     return {"status": "error", "error": "Mismatched response ID from MCP server."}
-
                 if "error" in response:
                     return {"status": "error", "error": response["error"]}
-
                 content = response.get("result", {}).get("content", [{}])[0]
                 if content.get("type") == "text":
-                    # The actual result from the R script is a JSON string in the 'text' field.
                     return json.loads(content.get("text", "{}"))
                 else:
                     return {"status": "error", "error": "Unsupported content type from MCP server."}
-
             except (IOError, json.JSONDecodeError) as e:
-                error_details = ""
-                if mcp_server_process and mcp_server_process.stderr:
-                    try:
-                        error_details = mcp_server_process.stderr.read()
-                    except IOError:
-                        pass
-                return {
-                    "status": "error",
-                    "error": f"Failed to communicate with MCP server: {e}",
-                    "details": error_details
-                }
-
-    # --- Tool Methods for LangChain Agent (Adapted from UnifiedMCPBackend) ---
+                error_details = self.process.stderr.read() if self.process and self.process.stderr else ""
+                return {"status": "error", "error": f"Failed to communicate with MCP server: {e}", "details": error_details}
 
     def initialize_meta_analysis(self, name: str, study_type: str, effect_measure: str, analysis_model: str) -> str:
         """Initialize a new meta-analysis session."""
@@ -431,7 +445,6 @@ Error: {result.get('error', 'Unknown error')}
 """
 
         response_parts = ["✅ R Code Executed Successfully:"]
-        # Order is important for clear output
         if result.get("stdout") and result['stdout'].strip():
             response_parts.append(f"**Console Output:**\n```\n{result['stdout'].strip()}\n```")
         if result.get("returned_result") and result['returned_result'].strip() != "NULL":
@@ -441,7 +454,6 @@ Error: {result.get('error', 'Unknown error')}
         if result.get("plot"):
             response_parts.append(f"**Generated Plot:**\n![R Plot](data:image/png;base64,{result['plot']})")
 
-        # If nothing was produced besides success, say so.
         if len(response_parts) == 1:
             return "✅ R code executed successfully with no output, return value, or plot."
 
@@ -487,23 +499,11 @@ Error: {result.get('error', 'Unknown error')}
         """Analyze figure/chart from image"""
         try:
             img = Image.open(image_path)
-
-            analysis = {
-                "dimensions": img.size,
-                "mode": img.mode,
-                "format": img.format
-            }
-
+            analysis = {"dimensions": img.size, "mode": img.mode, "format": img.format}
             buffered = BytesIO()
             img.save(buffered, format="PNG")
             img_base64 = base64.b64encode(buffered.getvalue()).decode()
-
-            return {
-                "status": "success",
-                "analysis": analysis,
-                "image_base64": img_base64,
-                "message": "Image processed successfully. Ready for AI interpretation."
-            }
+            return {"status": "success", "analysis": analysis, "image_base64": img_base64, "message": "Image processed successfully. Ready for AI interpretation."}
         except Exception as e:
             return {"status": "error", "error": f"Image analysis failed: {str(e)}"}
 
@@ -559,8 +559,8 @@ def handle_multimodal_submit(message: dict, history: list, model_name: str, shou
     yield history, gr.MultimodalTextbox(value=None, interactive=False)
     
     try:
-        # Initialize backend and LLM
-        backend = MCPClient()
+        # Use the global backend client and initialize LLM
+        backend = mcp_client
         llm = get_llm_client(model_name)
         
         # Process any attached files
@@ -849,57 +849,15 @@ with gr.Blocks(
         outputs=[file_list]
     )
 
-# =====================================================================================
-#  MCP Server Management
-# =====================================================================================
-
-mcp_server_process = None
-
-def start_mcp_server():
-    """Starts the MCP server as a background process."""
-    global mcp_server_process
-    if mcp_server_process is None or mcp_server_process.poll() is not None:
-        print("Starting MCP server...")
-        try:
-            mcp_server_process = subprocess.Popen(
-                [sys.executable, "server.py"],
-                stdin=subprocess.PIPE,
-                stdout=subprocess.PIPE,
-                stderr=subprocess.PIPE,
-                text=True,
-                encoding='utf-8',
-                bufsize=0  # Unbuffered for reliable stdin communication
-            )
-            print(f"MCP server started with PID: {mcp_server_process.pid}")
-        except FileNotFoundError:
-            print("ERROR: `server.py` not found. Make sure it is in the same directory.")
-            raise
-        except Exception as e:
-            print(f"ERROR: Failed to start MCP server: {e}")
-            raise
-
-def stop_mcp_server():
-    """Stops the MCP server process."""
-    global mcp_server_process
-    if mcp_server_process and mcp_server_process.poll() is None:
-        print("Stopping MCP server...")
-        mcp_server_process.terminate()
-        try:
-            mcp_server_process.wait(timeout=5)
-            print("MCP server stopped.")
-        except subprocess.TimeoutExpired:
-            print("MCP server did not terminate in time, killing it.")
-            mcp_server_process.kill()
-            print("MCP server killed.")
-        mcp_server_process = None
-
-# Register the stop function to be called on exit
-atexit.register(stop_mcp_server)
+# This section is now managed by the MCPClient class.
 
 
 # =====================================================================================
 #  Launch Configuration
 # =====================================================================================
+
+# Create a single, shared MCPClient instance for the application
+mcp_client = MCPClient()
 
 if __name__ == "__main__":
     # Check for API keys
@@ -911,8 +869,8 @@ if __name__ == "__main__":
     Path("outputs").mkdir(exist_ok=True)
     Path("sessions").mkdir(exist_ok=True)
     
-    # Start the MCP server
-    start_mcp_server()
+    # Start the MCP server using the client instance
+    mcp_client.start()
 
     # Launch the app
     demo.launch(
