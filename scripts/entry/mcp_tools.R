@@ -71,7 +71,7 @@ error_response <- function(message, details = NULL) {
 initialize_meta_analysis <- function(args) {
   session_path <- args$session_path
   if (!dir.exists(session_path)) dir.create(session_path, recursive = TRUE)
-  for (d in c("data", "processing", "results", "input")) {
+  for (d in c("data", "processing", "results", "input", "tmp")) {
     dir.create(file.path(session_path, d), showWarnings = FALSE, recursive = TRUE)
   }
   sess_id <- if (!is.null(args$session_id)) args$session_id else basename(session_path)

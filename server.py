@@ -100,6 +100,7 @@ def list_tools_resp(request_id):
             'assess_publication_bias',
             'generate_report',
             'get_session_status',
+            'execute_r_code',
         ]
     ]
     return {
