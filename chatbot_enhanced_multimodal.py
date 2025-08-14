@@ -843,7 +843,11 @@ with gr.Blocks(
 # Create a single, shared MCPClient instance for the application
 mcp_client = MCPClient()
 
+
+
 if __name__ == "__main__":
+    # Create MCPClient instance only when running as main
+    mcp_client = MCPClient()
     # Check for API keys
     if not AVAILABLE_MODELS:
         print("⚠️  Warning: No API keys configured!")
