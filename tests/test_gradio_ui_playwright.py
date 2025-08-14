@@ -87,7 +87,7 @@ def gradio_server():
     env["PYTHONUNBUFFERED"] = "1"
     env["TEST_MODE"] = "1"
     if "OPENAI_API_KEY" not in env and "ANTHROPIC_API_KEY" not in env:
-        env["OPENAI_API_KEY"] = "test-key-for-ui-testing"
+    ensure_api_keys(env)
 
     proc = subprocess.Popen(
         [sys.executable, str(server_path)],
