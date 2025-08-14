@@ -284,7 +284,10 @@ class MCPClient:
                     return {"status": "error", "error": "Mismatched response ID from MCP server."}
                 if "error" in response:
                     return {"status": "error", "error": response["error"]}
-                content = response.get("result", {}).get("content", [{}])[0]
+                content_list = response.get("result", {}).get("content", [])
+                if not content_list:
+                    return {"status": "error", "error": "Empty content list from MCP server."}
+                content = content_list[0]
                 if content.get("type") == "text":
                     return json.loads(content.get("text", "{}"))
                 else:
