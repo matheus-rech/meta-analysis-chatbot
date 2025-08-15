@@ -48,8 +48,14 @@ json_args$session_path <- session_path
 scripts_root <- normalizePath(file.path(script_dir, ".."), mustWork = FALSE)
 
 # Conditionally source scripts based on tool being called
-# This prevents loading all packages when we just need health check
-if (tool_name != "health_check") {
+# This prevents loading all packages when we just need simple tools
+meta_dependent_tools <- c("perform_meta_analysis", "generate_forest_plot", "assess_publication_bias")
+
+if (tool_name == "health_check") {
+  # Only source health check for health check requests
+  source(file.path(scripts_root, "tools", "health_check.R"))
+} else if (tool_name %in% meta_dependent_tools) {
+  # Source all tools for meta-analysis dependent operations
   source(file.path(scripts_root, "tools", "upload_data.R"))
   source(file.path(scripts_root, "tools", "perform_analysis.R"))
   source(file.path(scripts_root, "tools", "generate_forest_plot.R"))
@@ -61,10 +67,18 @@ if (tool_name != "health_check") {
   if (file.exists(cochrane_path)) {
     source(cochrane_path)
   }
+  source(file.path(scripts_root, "tools", "health_check.R"))
+} else {
+  # Source non-meta dependent tools (initialize, upload, status, execute, report)
+  source(file.path(scripts_root, "tools", "upload_data.R"))
+  source(file.path(scripts_root, "tools", "generate_report.R"))
+  source(file.path(scripts_root, "tools", "get_session_status.R"))
+  # Only source execute_r_code if specifically requested
+  if (tool_name == "execute_r_code") {
+    source(file.path(scripts_root, "tools", "execute_r_code.R"))
+  }
+  source(file.path(scripts_root, "tools", "health_check.R"))
 }
-
-# Always source health check (it's self-contained)
-source(file.path(scripts_root, "tools", "health_check.R"))
 
 # Helper to write JSON
 respond <- function(data) {
