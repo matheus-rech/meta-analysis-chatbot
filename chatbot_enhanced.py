@@ -241,6 +241,8 @@ class MCPClient:
         self.process: Optional[subprocess.Popen] = None
         self.current_session_id: Optional[str] = None
         self.sessions: Dict[str, Dict] = {}
+        self._session_access_times: Dict[str, float] = {}  # Track last access time
+        self._session_ttl: int = 3600  # 1 hour TTL in seconds
         atexit.register(self.stop)
 
     def start(self):
@@ -306,6 +308,30 @@ class MCPClient:
         print("✗ MCP server failed to become ready within timeout")
         return False
 
+    def _cleanup_expired_sessions(self):
+        """Clean up expired sessions to prevent memory leaks"""
+        import time
+        now = time.time()
+        expired_sessions = [
+            sid for sid, last_access in self._session_access_times.items()
+            if now - last_access > self._session_ttl
+        ]
+        
+        for session_id in expired_sessions:
+            if session_id in self.sessions:
+                del self.sessions[session_id]
+            if session_id in self._session_access_times:
+                del self._session_access_times[session_id]
+        
+        if expired_sessions:
+            print(f"Cleaned up {len(expired_sessions)} expired sessions")
+
+    def _update_session_access(self, session_id: str):
+        """Update last access time for session"""
+        import time
+        if session_id:
+            self._session_access_times[session_id] = time.time()
+
     def stop(self):
         """Stops the MCP server process."""
         if self.process and self.process.poll() is None:
@@ -370,6 +396,13 @@ class MCPClient:
         if result.get("status") == "success" and "session_id" in result:
             session_id = result["session_id"]
             self.current_session_id = session_id
+            
+            # Clean up expired sessions before adding new one
+            self._cleanup_expired_sessions()
+            
+            # Update access time and store session
+            import time
+            self._session_access_times[session_id] = time.time()
             self.sessions[session_id] = {
                 "name": name,
                 "path": result.get("session_path", tempfile.mkdtemp(prefix=f"meta_{session_id}_")),

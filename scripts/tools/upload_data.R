@@ -7,8 +7,17 @@ library(metafor)
 # Maximum file size in bytes (50MB)
 MAX_FILE_SIZE <- 50 * 1024 * 1024
 
+# Allowed file formats to prevent path traversal
+ALLOWED_FORMATS <- c("csv", "excel", "xlsx", "xls", "revman")
+
 upload_study_data <- function(args) {
   session_path <- args$session_path
+  
+  # Validate data format to prevent path traversal
+  if (is.null(args$data_format) || !args$data_format %in% ALLOWED_FORMATS) {
+    stop(sprintf("Invalid or unsupported data format: %s. Allowed formats: %s", 
+                 args$data_format, paste(ALLOWED_FORMATS, collapse = ", ")))
+  }
   
   # Decode base64 data content
   data_content <- args$data_content
