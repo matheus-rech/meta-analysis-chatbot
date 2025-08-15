@@ -11,7 +11,7 @@ import json
 import subprocess
 
 # Import all security modules
-from .secure_subprocess import SecureSubprocess, SecureSubprocessError
+from .secure_subprocess import SecureSubprocess, SecureSubprocessError, check_output, check_call
 from .validators import InputValidator, MetaAnalysisValidator, ValidationError, sanitize_for_r
 from .r_sanitizer import RScriptSanitizer, RSanitizerError
 from .file_security import SecureFileHandler, FileSecurityError
@@ -426,11 +426,10 @@ class SecurePatterns:
         kwargs.pop('shell', None)  # Never allow shell=True
         return secure_subprocess.run(cmd, **kwargs)
     
-    @staticmethod
-    def safe_subprocess_popen(cmd: Union[str, List[str]], **kwargs) -> subprocess.Popen:
-        """Safe replacement for subprocess.Popen"""
-        kwargs.pop('shell', None)  # Never allow shell=True
-        return secure_subprocess.popen(cmd, **kwargs)
+def safe_subprocess_popen(cmd: Union[str, List[str]], **kwargs) -> subprocess.Popen:
+    """Safe replacement for subprocess.Popen"""
+    kwargs.pop('shell', None)  # Never allow shell=True
+    return secure_subprocess.popen(cmd, **kwargs)
     
     @staticmethod
     def safe_json_loads(json_str: str) -> Any:
@@ -465,16 +464,17 @@ def apply_security_patches():
     import sys
     
     # Create secure subprocess module
-    class SecureSubprocessModule:
-        run = SecurePatterns.safe_subprocess_run
-        Popen = SecurePatterns.safe_subprocess_popen
-        # check_output = secure_subprocess.check_output
-        # check_call = secure_subprocess.check_call
-        
-        # Copy other attributes from original subprocess
-        def __getattr__(self, name):
-            import subprocess
-            return getattr(subprocess, name)
+# Create secure subprocess module
+class SecureSubprocessModule:
+    run = SecurePatterns.safe_subprocess_run
+    Popen = SecurePatterns.safe_subprocess_popen
+    # check_output = secure_subprocess.check_output
+    # check_call = secure_subprocess.check_call
+
+    # Copy other attributes from original subprocess
+    def __getattr__(self, name):
+        import subprocess
+        return getattr(subprocess, name)
     
     # Patch subprocess in all loaded modules
     secure_subprocess_module = SecureSubprocessModule()

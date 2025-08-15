@@ -15,6 +15,7 @@ from typing import Dict, List, Any
 from playwright.sync_api import Page, expect
 import pandas as pd
 import numpy as np
+import requests
 
 # Test configuration
 TEST_CONFIG = {
@@ -87,7 +88,9 @@ def gradio_server():
     env["PYTHONUNBUFFERED"] = "1"
     env["TEST_MODE"] = "1"
     if "OPENAI_API_KEY" not in env and "ANTHROPIC_API_KEY" not in env:
-    ensure_api_keys(env)
+        # Placeholder for actual key management
+        # TODO: Implement proper key management for API keys.
+        pytest.fail("Neither OPENAI_API_KEY nor ANTHROPIC_API_KEY is set in the environment. Please provide at least one API key for the Gradio server to function.")
 
     proc = subprocess.Popen(
         [sys.executable, str(server_path)],
@@ -99,8 +102,22 @@ def gradio_server():
 
     # Wait for the server to be ready
     print("Waiting for Gradio UI server to start...")
-    time.sleep(15)
-    print("Gradio UI server should be ready.")
+    start_time = time.time()
+    healthy = False
+    health_url = TEST_CONFIG['base_url'] + '/health'
+    while time.time() - start_time < 60:  # 60-second timeout for UI server
+        try:
+            response = requests.get(health_url, timeout=TEST_CONFIG['health_check_timeout'])
+            if response.status_code == 200 and response.json().get('status') == 'healthy':
+                healthy = True
+                print("Gradio UI server is healthy.")
+                break
+        except requests.ConnectionError:
+            time.sleep(0.5)
+
+    if not healthy:
+        proc.terminate()
+        pytest.fail("Gradio UI server did not become healthy within 60 seconds.")
 
     yield proc
 

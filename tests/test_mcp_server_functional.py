@@ -27,22 +27,53 @@ class TestMCPServerFunctional:
         env["DEBUG_R"] = "1"
         env["PYTHONUNBUFFERED"] = "1"
         env["RSCRIPT_TIMEOUT_SEC"] = "60"
+        env["OPENAI_API_KEY"] = "test"
         
         # Get project root (parent of tests directory)
         project_root = Path(__file__).parent.parent
         server_path = project_root / "server.py"
         
+
+        stderr_log = open("/tmp/server.log", "w")
         proc = subprocess.Popen(
             ["python", str(server_path)],
             stdin=subprocess.PIPE,
             stdout=subprocess.PIPE,
-            stderr=subprocess.PIPE,
+            stderr=stderr_log,
             text=True,
             env=env,
             cwd=str(project_root)  # Run from project root
         )
         
-        time.sleep(2)  # Give server time to start
+        # Wait for server to be healthy
+        start_time = time.time()
+        healthy = False
+        while time.time() - start_time < 30:  # 30-second timeout
+            try:
+                request = {
+                    "jsonrpc": "2.0",
+                    "id": "health_check",
+                    "method": "tools/call",
+                    "params": {"name": "health_check", "arguments": {}}
+                }
+                proc.stdin.write(json.dumps(request) + "\n")
+                proc.stdin.flush()
+
+                response_line = proc.stdout.readline()
+                response = json.loads(response_line)
+
+                if response.get("id") == "health_check":
+                    content = json.loads(response["result"]["content"][0]["text"])
+                    if content.get("status") == "healthy":
+                        healthy = True
+                        break
+            except (IOError, json.JSONDecodeError, KeyError):
+                time.sleep(0.2)
+
+        if not healthy:
+            proc.terminate()
+            pytest.fail("Server did not become healthy within 30 seconds.")
+
         yield proc
         
         proc.terminate()
