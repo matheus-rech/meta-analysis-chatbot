@@ -107,7 +107,7 @@ def gradio_server():
     health_url = TEST_CONFIG['base_url'] + '/health'
     while time.time() - start_time < 60:  # 60-second timeout for UI server
         try:
-            response = requests.get(health_url, timeout=1)
+            response = requests.get(health_url, timeout=TEST_CONFIG['health_check_timeout'])
             if response.status_code == 200 and response.json().get('status') == 'healthy':
                 healthy = True
                 print("Gradio UI server is healthy.")
