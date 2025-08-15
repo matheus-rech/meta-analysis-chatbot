@@ -464,16 +464,17 @@ def apply_security_patches():
     import sys
     
     # Create secure subprocess module
-    class SecureSubprocessModule:
-        run = SecurePatterns.safe_subprocess_run
-        Popen = SecurePatterns.safe_subprocess_popen
-        check_output = staticmethod(check_output)
-        check_call = staticmethod(check_call)
-        
-        # Copy other attributes from original subprocess
-        def __getattr__(self, name):
-            import subprocess
-            return getattr(subprocess, name)
+# Create secure subprocess module
+class SecureSubprocessModule:
+    run = SecurePatterns.safe_subprocess_run
+    Popen = SecurePatterns.safe_subprocess_popen
+    # check_output = secure_subprocess.check_output
+    # check_call = secure_subprocess.check_call
+
+    # Copy other attributes from original subprocess
+    def __getattr__(self, name):
+        import subprocess
+        return getattr(subprocess, name)
     
     # Patch subprocess in all loaded modules
     secure_subprocess_module = SecureSubprocessModule()

@@ -89,10 +89,27 @@ Available tools:
 10. execute_r_code - Execute arbitrary R code for custom analysis, data manipulation, or plotting. Use this powerful tool when other tools are insufficient.
 
 Always:
-- Explain statistical concepts clearly
-- Interpret results in context
-- Suggest appropriate next steps
+- Explain statistical concepts clearly for non-statisticians
+- Interpret results in clinical/practical context
+- Suggest appropriate next steps based on findings
 - Maintain rigorous scientific standards
+- Flag potential issues with data quality or statistical assumptions
+- Provide references to relevant statistical literature when helpful
+
+Workflow best practices:
+- Always start with initialize_meta_analysis for new projects
+- Upload and validate data before analysis
+- Perform comprehensive statistical analysis including heterogeneity tests
+- Generate publication bias assessments when you have ≥10 studies
+- Create visualizations to support findings
+- Generate comprehensive reports with all results
+
+Statistical guidance:
+- Use random-effects models for most meta-analyses
+- Check for heterogeneity using I² and Q-test
+- Assess publication bias with funnel plots and statistical tests
+- Consider subgroup analysis for exploring heterogeneity
+- Follow Cochrane Handbook recommendations
 """
 
 # =====================================================================================
@@ -241,12 +258,53 @@ class MCPClient:
                     bufsize=1  # Line-buffered for reliable stdin communication
                 )
                 print(f"MCP server started with PID: {self.process.pid}")
+                
+                # Wait for server to be ready using health checks
+                if not self._wait_for_server_ready():
+                    raise Exception("Server failed to become ready")
+                    
             except FileNotFoundError:
                 print("ERROR: `server.py` not found. Make sure it is in the same directory.")
                 raise
             except Exception as e:
                 print(f"ERROR: Failed to start MCP server: {e}")
                 raise
+
+    def _wait_for_server_ready(self, timeout: int = 30) -> bool:
+        """Wait for server to be ready by polling health check"""
+        import time
+        start_time = time.time()
+        
+        while time.time() - start_time < timeout:
+            try:
+                # Try a simple health check
+                request = {
+                    "jsonrpc": "2.0",
+                    "method": "health",
+                    "id": "health_check_startup"
+                }
+                
+                self.process.stdin.write(json.dumps(request) + "\n")
+                self.process.stdin.flush()
+                
+                # Set a short timeout for reading response
+                response_line = self.process.stdout.readline()
+                if response_line:
+                    try:
+                        response = json.loads(response_line)
+                        if response.get("result", {}).get("status") == "healthy":
+                            print("✓ MCP server is ready")
+                            return True
+                    except json.JSONDecodeError:
+                        pass
+                
+                time.sleep(1)
+                
+            except Exception as e:
+                time.sleep(1)
+                
+        print("✗ MCP server failed to become ready within timeout")
+        return False
 
     def stop(self):
         """Stops the MCP server process."""

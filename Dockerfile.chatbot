@@ -35,9 +35,11 @@ RUN pip install --no-cache-dir --upgrade pip setuptools wheel && \
 # Copy application files
 COPY chatbot_app.py ./chatbot_app.py
 COPY chatbot_langchain.py ./chatbot_langchain.py
+COPY chatbot_enhanced.py ./chatbot_enhanced.py
 COPY server.py ./server.py
 COPY scripts ./scripts
 COPY templates ./templates
+COPY utils ./utils
 
 # Create sessions directory
 RUN mkdir -p /app/sessions && chmod 777 /app/sessions
@@ -56,5 +58,5 @@ EXPOSE 7860
 HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
     CMD python3 -c "import requests; requests.get('http://localhost:7860/api/health')" || exit 1
 
-# Run the chatbot application (LangChain version by default)
-CMD ["python", "chatbot_langchain.py"]
+# Run the enhanced chatbot application (enhanced version with multimodal support)
+CMD ["python", "chatbot_enhanced.py"]
