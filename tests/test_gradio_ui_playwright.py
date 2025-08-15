@@ -89,7 +89,8 @@ def gradio_server():
     env["TEST_MODE"] = "1"
     if "OPENAI_API_KEY" not in env and "ANTHROPIC_API_KEY" not in env:
         # Placeholder for actual key management
-        pass
+        # TODO: Implement proper key management for API keys.
+        pytest.fail("Neither OPENAI_API_KEY nor ANTHROPIC_API_KEY is set in the environment. Please provide at least one API key for the Gradio server to function.")
 
     proc = subprocess.Popen(
         [sys.executable, str(server_path)],
