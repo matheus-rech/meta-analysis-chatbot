@@ -23,20 +23,6 @@ get_script_dir <- function() {
 
 script_dir <- get_script_dir()
 
-# Source modular implementations (relative to scripts root)
-scripts_root <- normalizePath(file.path(script_dir, ".."), mustWork = FALSE)
-source(file.path(scripts_root, "tools", "upload_data.R"))
-source(file.path(scripts_root, "tools", "perform_analysis.R"))
-source(file.path(scripts_root, "tools", "generate_forest_plot.R"))
-source(file.path(scripts_root, "tools", "assess_publication_bias.R"))
-source(file.path(scripts_root, "tools", "generate_report.R"))
-source(file.path(scripts_root, "tools", "get_session_status.R"))
-source(file.path(scripts_root, "tools", "execute_r_code.R"))
-cochrane_path <- file.path(scripts_root, "adapters", "cochrane_guidance.R")
-if (file.exists(cochrane_path)) {
-  source(cochrane_path)
-}
-
 # Get CLI args
 args <- commandArgs(trailingOnly = TRUE)
 if (length(args) < 2) {
@@ -57,6 +43,28 @@ session_path <- if (length(args) >= 3) args[3] else getwd()
 
 # Ensure session_path is present in args for downstream helpers
 json_args$session_path <- session_path
+
+# Source modular implementations (relative to scripts root)
+scripts_root <- normalizePath(file.path(script_dir, ".."), mustWork = FALSE)
+
+# Conditionally source scripts based on tool being called
+# This prevents loading all packages when we just need health check
+if (tool_name != "health_check") {
+  source(file.path(scripts_root, "tools", "upload_data.R"))
+  source(file.path(scripts_root, "tools", "perform_analysis.R"))
+  source(file.path(scripts_root, "tools", "generate_forest_plot.R"))
+  source(file.path(scripts_root, "tools", "assess_publication_bias.R"))
+  source(file.path(scripts_root, "tools", "generate_report.R"))
+  source(file.path(scripts_root, "tools", "get_session_status.R"))
+  source(file.path(scripts_root, "tools", "execute_r_code.R"))
+  cochrane_path <- file.path(scripts_root, "adapters", "cochrane_guidance.R")
+  if (file.exists(cochrane_path)) {
+    source(cochrane_path)
+  }
+}
+
+# Always source health check (it's self-contained)
+source(file.path(scripts_root, "tools", "health_check.R"))
 
 # Helper to write JSON
 respond <- function(data) {
@@ -91,9 +99,14 @@ initialize_meta_analysis <- function(args) {
   list(status = "success", session_id = sess_id, session_path = session_path, config = cfg)
 }
 
+# Health check implementation
+# Now using the dedicated health_check.R script
+
 # Dispatcher
 result <- tryCatch({
-  if (tool_name == "initialize_meta_analysis") {
+  if (tool_name == "health_check") {
+    health_check(json_args)
+  } else if (tool_name == "initialize_meta_analysis") {
     initialize_meta_analysis(json_args)
   } else if (tool_name == "upload_study_data") {
     # Base64-aware, size-guarded upload + processing

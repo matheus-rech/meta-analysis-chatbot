@@ -468,8 +468,8 @@ def apply_security_patches():
     class SecureSubprocessModule:
         run = SecurePatterns.safe_subprocess_run
         Popen = SecurePatterns.safe_subprocess_popen
-        check_output = secure_subprocess.check_output
-        check_call = secure_subprocess.check_call
+        # check_output = secure_subprocess.check_output
+        # check_call = secure_subprocess.check_call
         
         # Copy other attributes from original subprocess
         def __getattr__(self, name):

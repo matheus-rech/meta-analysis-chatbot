@@ -231,12 +231,58 @@ class MCPClient:
                     bufsize=1  # Line-buffered for reliable stdin communication
                 )
                 print(f"MCP server started with PID: {self.process.pid}")
+                
+                # Wait for server to be ready using health checks
+                if not self._wait_for_server_ready():
+                    raise Exception("Server failed to become ready")
+                    
             except FileNotFoundError:
                 print("ERROR: `server.py` not found. Make sure it is in the same directory.")
                 raise
             except Exception as e:
                 print(f"ERROR: Failed to start MCP server: {e}")
                 raise
+
+    def _wait_for_server_ready(self, timeout: int = 30) -> bool:
+        """Wait for server to be ready by polling health check"""
+        import time
+        start_time = time.time()
+        
+        while time.time() - start_time < timeout:
+            try:
+                # Try a simple health check
+                request = {
+                    "jsonrpc": "2.0",
+                    "method": "tools/call",
+                    "params": {"name": "health_check", "arguments": {}},
+                    "id": "health_check_startup"
+                }
+                
+                self.process.stdin.write(json.dumps(request) + "\n")
+                self.process.stdin.flush()
+                
+                # Set a short timeout for reading response
+                import select
+                ready, _, _ = select.select([self.process.stdout], [], [], 2)
+                
+                if ready:
+                    response_line = self.process.stdout.readline()
+                    if response_line:
+                        try:
+                            response = json.loads(response_line)
+                            if response.get("result"):
+                                print("✓ MCP server is ready")
+                                return True
+                        except json.JSONDecodeError:
+                            pass
+                
+                time.sleep(1)
+                
+            except Exception as e:
+                time.sleep(1)
+                
+        print("✗ MCP server failed to become ready within timeout")
+        return False
 
     def stop(self):
         """Stops the MCP server process."""
