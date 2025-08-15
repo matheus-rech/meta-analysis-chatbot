@@ -466,7 +466,7 @@ def apply_security_patches():
     # Create secure subprocess module
     class SecureSubprocessModule:
         run = SecurePatterns.safe_subprocess_run
-        Popen = safe_subprocess_popen
+        Popen = SecurePatterns.safe_subprocess_popen
         check_output = staticmethod(check_output)
         check_call = staticmethod(check_call)
         
