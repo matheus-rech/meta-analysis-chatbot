@@ -63,6 +63,53 @@ def start_server() -> None:
             text=True,
             bufsize=1,
         )
+        
+        # Wait for server to be ready
+        if not _wait_for_server_ready():
+            print("Warning: Server may not be fully ready")
+
+
+def _wait_for_server_ready(timeout: int = 15) -> bool:
+    """Wait for server to be ready by polling health check"""
+    import time
+    import json
+    
+    start_time = time.time()
+    
+    while time.time() - start_time < timeout:
+        try:
+            # Try a simple health check
+            request = {
+                "jsonrpc": "2.0",
+                "method": "tools/call",
+                "params": {"name": "health_check", "arguments": {}},
+                "id": "health_check_startup"
+            }
+            
+            if server_proc and server_proc.poll() is None:
+                server_proc.stdin.write(json.dumps(request) + "\n")
+                server_proc.stdin.flush()
+                
+                # Short timeout for reading response
+                import select
+                ready, _, _ = select.select([server_proc.stdout], [], [], 2)
+                
+                if ready:
+                    response_line = server_proc.stdout.readline()
+                    if response_line:
+                        try:
+                            response = json.loads(response_line)
+                            if response.get("result"):
+                                return True
+                        except json.JSONDecodeError:
+                            pass
+            
+            time.sleep(1)
+            
+        except Exception:
+            time.sleep(1)
+            
+    return False
 
 
 def stop_server() -> None:
