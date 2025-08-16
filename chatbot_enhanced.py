@@ -153,6 +153,9 @@ class GenerateReportInput(BaseModel):
 class ExecuteRCodeInput(BaseModel):
     r_code: str = Field(description="A string of R code to be executed in the current session context.")
 
+class GetSessionStatusInput(BaseModel):
+    session_id: Optional[str] = Field(description="Session ID. If None, uses the active session.", default=None)
+
 # =====================================================================================
 #  File Management Functions
 # =====================================================================================
@@ -414,21 +417,33 @@ class MCPClient:
         result = self.call_tool("perform_meta_analysis", args)
 
         if result.get("status") == "success":
-            summary = result.get("summary", {})
+            # Align with R schema
+            overall = result.get("overall_effect", "N/A")
+            ci = result.get("confidence_interval", {}) or {}
+            ci_lower = ci.get("lower", "N/A")
+            ci_upper = ci.get("upper", "N/A")
+            p_value = result.get("p_value", "N/A")
+            hetero = result.get("heterogeneity", {}) or {}
+            i2 = hetero.get("i_squared", hetero.get("I2", "N/A"))
+            tau2 = hetero.get("tau_squared", hetero.get("tau2", "N/A"))
+            q = hetero.get("q_test", {}) or {}
+            q_p = q.get("p_value", "N/A")
+            interp = hetero.get("interpretation", result.get("interpretation", "See detailed report for full interpretation."))
+
             return f"""✅ Meta-analysis completed!
 
 **Overall Effect:**
-- Estimate: {summary.get('estimate', 'N/A')}
-- 95% CI: [{summary.get('ci_lower', 'N/A')}, {summary.get('ci_upper', 'N/A')}]
-- p-value: {summary.get('p_value', 'N/A')}
+- Estimate: {overall}
+- 95% CI: [{ci_lower}, {ci_upper}]
+- p-value: {p_value}
 
 **Heterogeneity:**
-- I²: {summary.get('i_squared', 'N/A')}%
-- τ²: {summary.get('tau_squared', 'N/A')}
-- Q-test p-value: {summary.get('q_pvalue', 'N/A')}
+- I²: {i2}
+- τ²: {tau2}
+- Q-test p-value: {q_p}
 
-**Interpretation:** {summary.get('interpretation', 'See detailed report for full interpretation.')}"""
-        return f"❌ Analysis failed: {result.get('error', 'Unknown error')}"
+**Interpretation:** {interp}"""
+        return f"❌ Analysis failed: {result.get('message', result.get('error', 'Unknown error'))}"
 
     def generate_forest_plot(self, session_id: Optional[str] = None, **kwargs) -> str:
         """Generate a forest plot."""
@@ -440,11 +455,19 @@ class MCPClient:
         result = self.call_tool("generate_forest_plot", args)
 
         if result.get("status") == "success":
-            plot_data = result.get("plot", "")
-            if plot_data:
-                return f"✅ Forest plot generated!\n\n![Forest Plot](data:image/png;base64,{plot_data})"
+            # Prefer base64 if present, else try to read the file path
+            if result.get("plot"):
+                return f"✅ Forest plot generated!\n\n![Forest Plot](data:image/png;base64,{result['plot']})"
+            plot_path = result.get("forest_plot_path") or result.get("plot_file") or result.get("plot_path")
+            if plot_path and os.path.exists(plot_path):
+                try:
+                    with open(plot_path, "rb") as f:
+                        b64 = base64.b64encode(f.read()).decode()
+                    return f"✅ Forest plot generated!\n\n![Forest Plot](data:image/png;base64,{b64})"
+                except Exception:
+                    return f"✅ Forest plot generated and saved to: {plot_path}"
             return "✅ Forest plot generated and saved to session folder."
-        return f"❌ Plot generation failed: {result.get('error', 'Unknown error')}"
+        return f"❌ Plot generation failed: {result.get('message', result.get('error', 'Unknown error'))}"
 
     def assess_publication_bias(self, session_id: Optional[str] = None, methods: List[str] = None) -> str:
         """Assess publication bias."""
@@ -459,19 +482,23 @@ class MCPClient:
         result = self.call_tool("assess_publication_bias", args)
 
         if result.get("status") == "success":
-            tests = result.get("tests", {})
+            egger = (result.get("egger_test", {}) or {}).get("p_value", "N/A")
+            egger_interpret = (result.get("egger_test", {}) or {}).get("interpretation", "N/A")
+            begg = (result.get("begg_test", {}) or {}).get("p_value", "N/A")
+            begg_interpret = (result.get("begg_test", {}) or {}).get("interpretation", "N/A")
+            overall = result.get("overall_interpretation", result.get("message", "See full report for details."))
             return f"""✅ Publication bias assessment completed!
 
 **Egger's Test:**
-- p-value: {tests.get('egger_p', 'N/A')}
-- Interpretation: {tests.get('egger_interpretation', 'N/A')}
+- p-value: {egger}
+- Interpretation: {egger_interpret}
 
 **Begg's Test:**
-- p-value: {tests.get('begg_p', 'N/A')}
-- Interpretation: {tests.get('begg_interpretation', 'N/A')}
+- p-value: {begg}
+- Interpretation: {begg_interpret}
 
-**Overall Assessment:** {result.get('overall_assessment', 'See full report for details.')}"""
-        return f"❌ Bias assessment failed: {result.get('error', 'Unknown error')}"
+**Overall Assessment:** {overall}"""
+        return f"❌ Bias assessment failed: {result.get('message', result.get('error', 'Unknown error'))}"
 
     def generate_report(self, session_id: Optional[str] = None, **kwargs) -> str:
         """Generate a comprehensive report."""
@@ -493,9 +520,28 @@ class MCPClient:
             return f"Current session ID: {self.current_session_id}"
         return "No active session. Please use 'initialize_meta_analysis' to start."
 
+    def get_session_status(self, session_id: Optional[str] = None) -> str:
+        """Get detailed session status from the backend."""
+        active_session_id = session_id or self.current_session_id
+        if not active_session_id:
+            return "❌ Error: No active session."
+        res = self.call_tool("get_session_status", {"session_id": active_session_id})
+        if res.get("status") != "success":
+            return f"❌ Failed to get session status: {res.get('message', res.get('error', 'Unknown error'))}"
+        # Pretty-print a subset
+        details = {
+            "session_id": active_session_id,
+            "data_present": res.get("data_present"),
+            "results_present": res.get("results_present"),
+            "paths": res.get("paths", {}),
+            "last_updated": res.get("last_updated")
+        }
+        return "📌 Session Status:\n" + json.dumps(details, indent=2)
+
     def execute_r_code(self, r_code: str) -> str:
         """Executes arbitrary R code and returns the result."""
-        result = self.call_tool("execute_r_code", {"r_code": r_code})
+        # Prefer 'code' arg; server/R also accepts 'r_code' for back-compat
+        result = self.call_tool("execute_r_code", {"code": r_code})
 
         if result.get("status") == "error":
             return f"""❌ R Code Execution Failed:
@@ -503,17 +549,22 @@ Error: {result.get('error', 'Unknown error')}
 """
 
         response_parts = ["✅ R Code Executed Successfully:"]
-        if result.get("stdout") and result['stdout'].strip():
-            response_parts.append(f"**Console Output:**\n```\n{result['stdout'].strip()}\n```")
-        if result.get("returned_result") and result['returned_result'].strip() != "NULL":
-            response_parts.append(f"**Returned Result:**\n```R\n{result['returned_result'].strip()}\n```")
-        if result.get("warnings") and result['warnings'].strip():
-            response_parts.append(f"**Warnings:**\n```\n{result['warnings'].strip()}\n```")
+        # Console output
+        out = result.get("stdout")
+        if isinstance(out, str) and out.strip():
+            response_parts.append(f"**Console Output:**\n```\n{out.strip()}\n```")
+        # Warnings may be a list or string
+        warns = result.get("warnings")
+        if isinstance(warns, list) and len(warns) > 0:
+            response_parts.append("**Warnings:**\n" + "\n".join(f"- {w}" for w in warns))
+        elif isinstance(warns, str) and warns.strip():
+            response_parts.append(f"**Warnings:**\n```\n{warns.strip()}\n```")
+        # Plot
         if result.get("plot"):
             response_parts.append(f"**Generated Plot:**\n![R Plot](data:image/png;base64,{result['plot']})")
 
         if len(response_parts) == 1:
-            return "✅ R code executed successfully with no output, return value, or plot."
+            return "✅ R code executed successfully with no output or plot."
 
         return "\n\n".join(response_parts)
 
@@ -701,6 +752,12 @@ def handle_multimodal_submit(message: dict, history: list, model_name: str, shou
                 description="Get the current active session ID"
             ),
             StructuredTool.from_function(
+                func=backend.get_session_status,
+                name="get_session_status",
+                description="Get detailed status of the current or specified session",
+                args_schema=GetSessionStatusInput
+            ),
+            StructuredTool.from_function(
                 func=backend.execute_r_code,
                 name="execute_r_code",
                 description="Execute arbitrary R code for custom analysis or plotting. Use this for tasks not covered by other tools, like generating custom plots with ggplot2 or performing non-standard calculations.",
@@ -850,8 +907,8 @@ with gr.Blocks(
             )
             
             multimodal_input = gr.MultimodalTextbox(
-                file_types=["image", "text"],
-                placeholder="Ask a question, upload data files, or share research papers...",
+                file_types=["image", "file", "text"],
+                placeholder="Ask a question, upload data files (CSV/Excel), images, or share PDFs...",
                 label="Your Input",
                 submit_btn=True
             )
