@@ -65,6 +65,8 @@ generate_forest_plot <- function(args) {
 
   # Set output file path
   output_file <- file.path(output_dir, "forest_plot.png")
+  # Optional: a base64 copy path
+  b64_file <- file.path(output_dir, "forest_plot.b64.txt")
 
   # Get parameters
   plot_style <- if (!is.null(args$plot_style)) args$plot_style else "classic"
@@ -126,10 +128,22 @@ generate_forest_plot <- function(args) {
         )
       }
 
+      # Optionally return base64-encoded plot to simplify embedding
+      plot_b64 <- NULL
+      if (file.exists(plot_path)) {
+        try({
+          raw <- readBin(plot_path, what = "raw", n = file.info(plot_path)$size)
+          plot_b64 <- base64enc::base64encode(raw)
+          # save a copy for inspection
+          writeLines(plot_b64, b64_file)
+        }, silent = TRUE)
+      }
+
       # Return success response
       list(
         status = "success",
         forest_plot_path = plot_path,
+        plot = plot_b64,
         plot_details = list(
           n_studies = meta_result$k,
           effect_measure = meta_result$sm,
