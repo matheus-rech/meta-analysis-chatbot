@@ -1,15 +1,15 @@
 # scripts/tools/execute_r_code.R
 
-# Ensure required packages are available (best-effort installs when missing)
+# Ensure required packages are available
 if (!requireNamespace("base64enc", quietly = TRUE)) {
-  try({ install.packages("base64enc", repos = "https://cloud.r-project.org") }, silent = TRUE)
+  install.packages("base64enc", repos = "https://cloud.r-project.org")
 }
 if (!requireNamespace("evaluate", quietly = TRUE)) {
-  try({ install.packages("evaluate", repos = "https://cloud.r-project.org") }, silent = TRUE)
+  install.packages("evaluate", repos = "https://cloud.r-project.org")
 }
 
 execute_r_code <- function(args) {
-  # Accept either args$code (preferred) or args$r_code (back-compat)
+  # Prefer 'code', but accept legacy 'r_code' for back-compat
   code_to_execute <- args$code
   if (is.null(code_to_execute) && !is.null(args$r_code)) {
     code_to_execute <- args$r_code
@@ -17,11 +17,7 @@ execute_r_code <- function(args) {
   session_path <- args$session_path
 
   if (is.null(code_to_execute) || !is.character(code_to_execute) || length(code_to_execute) != 1) {
-    return(list(status = "error", message = "No 'code' argument provided or it is not a single string."))
-  }
-
-  if (is.null(session_path)) {
-    session_path <- getwd()
+    return(list(status = "error", error = "No 'code' argument provided or it is not a single string."))
   }
 
   # Ensure the tmp directory exists
@@ -38,16 +34,20 @@ execute_r_code <- function(args) {
   errors_text <- c()
   plot_data <- NULL
 
-  # Graphics handler: save the most recent plot to plot_path
-  save_plot_safely <- function(plot_obj) {
+  # Helper to safely save a recorded plot object
+  save_plot_safely <- function(p) {
+    # Open device, print, and always close
+    dev_opened <- FALSE
     tryCatch({
-      grDevices::png(plot_path, width = 8, height = 6, units = "in", res = 150)
-      print(plot_obj)
-      grDevices::dev.off()
+      grDevices::png(plot_path, width = 8, height = 6, units = "in", res = 300)
+      dev_opened <- TRUE
+      print(p)
     }, error = function(e) {
-      # swallow graphics errors into warnings
-      warnings_text <<- c(warnings_text, paste("Graphics error:", conditionMessage(e)))
-      try({ grDevices::dev.off() }, silent = TRUE)
+      warnings_text <<- c(warnings_text, paste0("Failed to save plot: ", conditionMessage(e)))
+    }, finally = {
+      if (dev_opened) {
+        try(grDevices::dev.off(), silent = TRUE)
+      }
     })
   }
 
@@ -57,7 +57,6 @@ execute_r_code <- function(args) {
       output_text <<- paste0(output_text, o)
     },
     graphics = function(p) {
-      # p is a recorded plot or expression that can be printed
       save_plot_safely(p)
     },
     message = function(m) {
@@ -68,34 +67,31 @@ execute_r_code <- function(args) {
       warnings_text <<- c(warnings_text, conditionMessage(w))
     },
     error = function(e) {
+      # Capture error message (evaluate continues capturing, we return status=error later)
       errors_text <<- c(errors_text, conditionMessage(e))
     }
   )
 
-  # Execute the code
-  tryCatch({
-    evaluate::evaluate(code_to_execute, envir = exec_env, output_handler = oh)
-  }, error = function(e) {
-    errors_text <<- c(errors_text, conditionMessage(e))
-  })
+  # Use evaluate to run the code
+  evaluate::evaluate(code_to_execute, envir = exec_env, output_handler = oh)
 
   # Check if a plot was created and encode it
   if (file.exists(plot_path) && file.info(plot_path)$size > 0) {
     plot_data <- base64enc::base64encode(plot_path)
   }
 
-  # Clean up the temp plot file (best-effort)
+  # Clean up the temp plot file
   if (file.exists(plot_path)) {
-    try({ unlink(plot_path) }, silent = TRUE)
+    unlink(plot_path)
   }
 
   # Prepare the response
   response <- list(
-    status   = if (length(errors_text) > 0) "error" else "success",
-    stdout   = if (nzchar(trimws(output_text))) trimws(output_text) else NULL,
+    status = if (length(errors_text) > 0) "error" else "success",
+    stdout = trimws(output_text),
     warnings = if (length(warnings_text) > 0) warnings_text else NULL,
-    error    = if (length(errors_text) > 0) paste(errors_text, collapse = "\n") else NULL,
-    plot     = plot_data
+    error = if (length(errors_text) > 0) paste(errors_text, collapse = "\n") else NULL,
+    plot = plot_data
   )
 
   return(response)
