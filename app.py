@@ -1,8 +1,8 @@
 import os
 import json
 import subprocess
-from utils.security_integration import apply_security_patches
-apply_security_patches()
+# from utils.security_integration import apply_security_patches
+# apply_security_patches()
 import threading
 from typing import Optional
 
@@ -47,15 +47,33 @@ SERVER_SCRIPT_PATH = os.path.join(os.path.dirname(__file__), "server.py")
 SERVER_CMD = ["python", SERVER_SCRIPT_PATH]
 
 server_proc: Optional[subprocess.Popen] = None
-server_lock = threading.Lock()
+server_lock = threading.RLock()  # Use RLock for better thread safety
+server_starting = False  # Flag to prevent race conditions
 
 
 def start_server() -> None:
-    global server_proc
+    global server_proc, server_starting
+    import time
+    
     with server_lock:
+        # Check if already starting
+        if server_starting:
+            # Wait for other thread to finish starting
+            timeout = time.time() + 5
+            while server_starting and time.time() < timeout:
+                time.sleep(0.1)
+            return
+        
+        # Check if already running
         if server_proc and server_proc.poll() is None:
             return
-        server_proc = subprocess.Popen(
+        
+        # Mark as starting
+        server_starting = True
+    
+    try:
+        # Start process outside lock to avoid holding lock during I/O
+        proc = subprocess.Popen(
             SERVER_CMD,
             stdin=subprocess.PIPE,
             stdout=subprocess.PIPE,
@@ -64,9 +82,23 @@ def start_server() -> None:
             bufsize=1,
         )
         
+        # Wait briefly to ensure process started
+        time.sleep(0.5)
+        
+        # Check if process is still running
+        if proc.poll() is not None:
+            raise RuntimeError("Server process died immediately")
+        
+        with server_lock:
+            server_proc = proc
+        
         # Wait for server to be ready
         if not _wait_for_server_ready():
             print("Warning: Server may not be fully ready")
+    
+    finally:
+        with server_lock:
+            server_starting = False
 
 
 def _wait_for_server_ready(timeout: int = 15) -> bool:

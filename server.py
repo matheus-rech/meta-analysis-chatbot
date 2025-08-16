@@ -5,10 +5,12 @@ import base64
 import tempfile
 import subprocess
 import time
-from utils.security_integration import apply_security_patches
+# from utils.security_integration import apply_security_patches
 # apply_security_patches()  # Temporarily disabled due to compatibility issues
 import uuid
+import shlex
 from typing import Any, Dict
+from utils.validators import InputValidator, ValidationError
 
 # Minimal MCP server in Python over stdio
 # It dispatches tool calls to the existing R scripts via Rscript mcp_tools.R
@@ -21,7 +23,8 @@ RSCRIPT_BIN = os.getenv('RSCRIPT_BIN', 'Rscript')
 DEFAULT_TIMEOUT = int(os.getenv('RSCRIPT_TIMEOUT_SEC', '300'))
 DEBUG_R = os.getenv('DEBUG_R') == '1'
 
-TOOLS = [
+# Whitelist of allowed tools to prevent command injection
+ALLOWED_TOOLS = {
     'health_check',
     'initialize_meta_analysis',
     'upload_study_data',
@@ -31,10 +34,44 @@ TOOLS = [
     'generate_report',
     'get_session_status',
     'execute_r_code',
-]
+}
+
+TOOLS = list(ALLOWED_TOOLS)
 
 
 def execute_r(tool: str, args: Dict[str, Any], session_path: str = None, timeout: int = DEFAULT_TIMEOUT) -> Dict[str, Any]:
+    try:
+        # Validate tool name against whitelist to prevent command injection
+        if tool not in ALLOWED_TOOLS:
+            return {'status': 'error', 'message': f'Invalid tool name: {tool}'}
+        
+        # Validate tool name format for extra safety
+        tool = InputValidator.validate_string(tool, min_length=1, max_length=50, pattern='alphanumeric')
+        
+        # Validate and sanitize session path
+        if session_path:
+            session_path = os.path.abspath(session_path)
+            # Ensure path is within allowed directory structure
+            allowed_root = os.path.abspath(os.environ.get('SESSIONS_DIR', os.getcwd()))
+            if not session_path.startswith(allowed_root):
+                return {'status': 'error', 'message': 'Invalid session path'}
+        
+        # Validate args is a proper dictionary
+        if not isinstance(args, dict):
+            return {'status': 'error', 'message': 'Arguments must be a dictionary'}
+        
+        # Basic validation of common argument keys
+        if 'session_id' in args:
+            try:
+                args['session_id'] = InputValidator.validate_session_id(args['session_id'])
+            except ValidationError as e:
+                return {'status': 'error', 'message': f'Invalid session_id: {e}'}
+        
+    except ValidationError as e:
+        return {'status': 'error', 'message': f'Validation error: {e}'}
+    except Exception as e:
+        return {'status': 'error', 'message': f'Unexpected validation error: {e}'}
+    
     session_dir = session_path or os.getcwd()
     # Write JSON args to a temp file to avoid OS arg-length limits
     args_file = None
@@ -49,8 +86,9 @@ def execute_r(tool: str, args: Dict[str, Any], session_path: str = None, timeout
         with open(args_file, 'w', encoding='utf-8') as f:
             json.dump(args, f)
 
+    # Use shlex.quote to safely escape arguments
     proc = subprocess.Popen(
-        [RSCRIPT_BIN, '--vanilla', SCRIPTS_ENTRY, tool, args_file, session_dir],
+        [RSCRIPT_BIN, '--vanilla', SCRIPTS_ENTRY, shlex.quote(tool), shlex.quote(args_file), shlex.quote(session_dir)],
         stdin=subprocess.PIPE,
         stdout=subprocess.PIPE,
         stderr=subprocess.PIPE,
