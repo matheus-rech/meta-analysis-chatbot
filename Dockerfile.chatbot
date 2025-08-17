@@ -28,6 +28,13 @@ COPY requirements-chatbot.txt ./requirements.txt
 RUN python3 -m venv /opt/venv
 ENV PATH="/opt/venv/bin:$PATH"
 
+# Set R env variables for rpy2
+ENV R_HOME=/usr/lib/R
+ENV PATH="/usr/lib/R/bin:${PATH}"
+
+# Diagnostic: check R location and version
+RUN echo $R_HOME && which R && R --version
+
 # Upgrade pip and install Python dependencies
 RUN pip install --no-cache-dir --upgrade pip setuptools wheel && \
     pip install --no-cache-dir -r requirements.txt

@@ -81,3 +81,6 @@ docs/.doctrees/
 # Gradio
 gradio_cached_examples/
 flagged/
+# Test run artifacts
+tests/playwright_report.html
+tests/test_report_*.json
