@@ -48,7 +48,7 @@ try:
     
     # Try importing key components
     from chatbot_enhanced import (
-        EnhancedMCPToolWrapper,
+        MCPClient,
         InitializeMetaAnalysisInput,
         generate_filename,
         SYSTEM_PROMPT
@@ -73,7 +73,7 @@ try:
     print(f"✅ Pydantic model created: {test_input.name}")
     
     # Test tool wrapper initialization
-    wrapper = EnhancedMCPToolWrapper()
+    wrapper = MCPClient()
     print("✅ Tool wrapper initialized")
     
     print("\n🎉 All tests passed! The enhanced chatbot is ready to use.")
