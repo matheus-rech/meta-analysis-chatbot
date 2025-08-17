@@ -15,6 +15,7 @@ pytest
 python-multipart>=0.0.9
 PyPDF2>=3.0.1
 pytz
+psutil
 rpy2
 tiktoken
 uvicorn[standard]>=0.30.0
