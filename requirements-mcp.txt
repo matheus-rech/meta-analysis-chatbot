@@ -22,7 +22,7 @@ rpy2>=3.5.0
 # File handling
 python-multipart>=0.0.9
 PyPDF2>=3.0.1
-pillow>=10.3.0
+pillow>=10.4.0
 pytz
 
 # LangChain (optional, for advanced features)
