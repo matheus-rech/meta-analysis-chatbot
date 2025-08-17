@@ -35,7 +35,9 @@ tool = InputValidator.validate_string(tool, pattern='alphanumeric')
 
 # Use shlex.quote for safe escaping
 proc = subprocess.Popen(
-    [RSCRIPT_BIN, '--vanilla', SCRIPTS_ENTRY, shlex.quote(tool), shlex.quote(args_file), shlex.quote(session_dir)],
+# Pass validated arguments directly (do not use shlex.quote with list arguments)
+proc = subprocess.Popen(
+    [RSCRIPT_BIN, '--vanilla', SCRIPTS_ENTRY, tool, args_file, session_dir],
     ...
 )
 ```
