@@ -302,7 +302,7 @@ class EnvironmentSetup:
         print("  SETUP COMPLETE")
         print(f"{'='*40}")
         print(f"Next steps:")
-        print(f"1. Configure API keys in .env file")
+        print("1. Configure API keys in .env file")
         print("2. Run: python chatbot_langchain.py")
         print(f"3. Access UI at: http://localhost:7860")
         
