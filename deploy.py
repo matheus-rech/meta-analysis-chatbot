@@ -33,7 +33,39 @@ class ProductionMonitor:
         config_file = self.config_dir / "monitoring.json"
         if config_file.exists():
             with open(config_file, 'r') as f:
-                return json.load(f)
+"""Load monitoring configuration"""
+        config_file = self.config_dir / "monitoring.json"
+        if config_file.exists():
+            try:
+                with open(config_file, 'r') as f:
+                    return json.load(f)
+            except (PermissionError, OSError):
+                # Log the error
+                self.log_message('ERROR', f"Failed to read config file: {config_file}")
+                return self.get_default_config()
+        else:
+            return self.get_default_config()
+            
+    def get_default_config(self):
+        """Return default configuration"""
+        return {
+            'performance': {
+                'enabled': True,
+                'interval_seconds': 300,
+                'cpu_threshold': 80,
+                'memory_threshold': 80
+            },
+            'security': {
+                'enabled': True,
+                'rate_limit_per_minute': 30,
+                'session_timeout_hours': 24
+            },
+            'logging': {
+                'level': 'INFO',
+                'file': str(self.logs_dir / 'production.log'),
+                'max_size_mb': 100
+            }
+        }
         else:
             # Default configuration
             return {
