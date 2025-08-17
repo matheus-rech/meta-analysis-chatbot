@@ -266,7 +266,14 @@ class EnvironmentSetup:
                 
         # Test Docker build (if Docker is available)
         try:
-            subprocess.run(['docker', '--version'], 
+# Test Docker build (if Docker is available)
+        try:
+            # Import subprocess and shlex for secure command execution
+            import subprocess, shlex
+            command = 'docker --version'
+            subprocess.run(shlex.split(command), 
+                         capture_output=True, text=True, check=True)
+            print("✓ Docker available")
                          capture_output=True, text=True, check=True)
             print("✓ Docker available")
             
