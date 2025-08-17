@@ -1026,6 +1026,10 @@ with gr.Blocks(
 
 # Create a single, shared MCPClient instance for the application
 mcp_client = MCPClient()
+
+# For backward compatibility with tests
+EnhancedMCPToolWrapper = MCPClient
+
 if __name__ == "__main__":
     # Check for API keys
     if not AVAILABLE_MODELS:
