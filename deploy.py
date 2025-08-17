@@ -151,7 +151,7 @@ class ProductionMonitor:
         """Check R backend health"""
         try:
             result = subprocess.run(['/usr/bin/Rscript', '-e', 'library(jsonlite); cat(toJSON(list(status="healthy")))'], capture_output=True, text=True, timeout=10)
-                ['Rscript', '-e', 'library(jsonlite); cat(toJSON(list(status="healthy")))'],
+                            result = subprocess.run(['Rscript', '-e', 'library(jsonlite); cat(toJSON(list(status="healthy")))'], capture_output=True, text=True, timeout=10)
                 capture_output=True, text=True, timeout=10
 def check_r_health(self):
         """Check R backend health"""
