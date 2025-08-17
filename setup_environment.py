@@ -5,7 +5,7 @@ Implements the TODO requirements for installation and configuration
 """
 import os
 import sys
-import subprocess
+# import subprocess  # Remove this line if subprocess is not used, or ensure to use it safely later
 import shutil
 from pathlib import Path
 
