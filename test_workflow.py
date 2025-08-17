@@ -191,7 +191,16 @@ class WorkflowTester:
             
         except ImportError:
             print("⚠ pandas not available, testing with built-in csv")
+except ImportError:
+            print("⚠ pandas not available, testing with built-in csv")
+            # import os.path
+            # Validate the csv_file path to prevent path traversal
+            if not os.path.abspath(csv_file).startswith(os.path.abspath(self.allowed_directory)):
+                print("✗ Invalid file path")
+                return False
             with open(csv_file, 'r') as f:
+                import csv
+                reader = csv.DictReader(f)
                 import csv
                 reader = csv.DictReader(f)
                 rows = list(reader)
