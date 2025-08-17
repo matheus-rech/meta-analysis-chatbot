@@ -119,7 +119,7 @@ class WorkflowTester:
         # Check if server.py exists and can be started
         server_path = self.repo_root / "server.py"
         if not server_path.exists():
-            print(f"✗ server.py not found")
+            print("✗ server.py not found")
             return False
             
         print(f"✓ Found MCP server: {server_path}")
