@@ -4,7 +4,13 @@ gradio>=5.11.0
 langchain
 langchain-anthropic
 langchain-openai
-mcp>=1.0.0
+langchain
+langchain-anthropic
+langchain-openai
+mcp>=1.9.4
+numpy
+openai
+opencv-python-headless
 numpy
 openai
 opencv-python-headless
