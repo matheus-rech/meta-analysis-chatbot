@@ -154,7 +154,7 @@ class EnvironmentSetup:
         
         if not env_file.exists() and env_example.exists():
             shutil.copy(env_example, env_file)
-            print(f"✓ Created .env from .env.example")
+            print("✓ Created .env from .env.example")
         
         # Check for API keys
         openai_key = os.getenv('OPENAI_API_KEY')
