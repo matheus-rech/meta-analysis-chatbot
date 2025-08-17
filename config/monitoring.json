@@ -1,0 +1,18 @@
+{
+  "performance": {
+    "enabled": true,
+    "interval_seconds": 300,
+    "cpu_threshold": 80,
+    "memory_threshold": 80
+  },
+  "security": {
+    "enabled": true,
+    "rate_limit_per_minute": 30,
+    "session_timeout_hours": 24
+  },
+  "logging": {
+    "level": "INFO",
+    "file": "/home/runner/work/meta-analysis-chatbot/meta-analysis-chatbot/logs/app.log",
+    "max_size_mb": 100
+  }
+}

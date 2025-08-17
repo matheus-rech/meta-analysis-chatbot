@@ -1,0 +1,101 @@
+# Enhanced Meta-Analysis Chatbot Docker Image
+# Optimized for production deployment with monitoring and security
+
+FROM python:3.11-slim
+
+# Install system dependencies including R and development tools
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    # R and statistical packages
+    r-base \
+    r-base-dev \
+    r-cran-jsonlite \
+    r-cran-ggplot2 \
+    r-cran-knitr \
+    r-cran-rmarkdown \
+    r-cran-readxl \
+    # System utilities
+    curl \
+    wget \
+    ca-certificates \
+    # Build dependencies
+    build-essential \
+    libtirpc-dev \
+    # Clean up
+    && rm -rf /var/lib/apt/lists/* \
+    && apt-get clean
+
+# Set working directory
+WORKDIR /app
+
+# Copy dependency files first for better caching
+COPY requirements-chatbot.txt requirements-minimal.txt ./
+
+# Install Python dependencies with network timeout handling
+RUN pip install --no-cache-dir --timeout=300 \
+    anthropic \
+    fastapi>=0.111.0 \
+    gradio>=5.11.0 \
+    langchain \
+    langchain-anthropic \
+    langchain-openai \
+    mcp \
+    numpy \
+    openai \
+    opencv-python-headless \
+    pandas \
+    pillow>=10.4.0 \
+    pydantic \
+    pytest \
+    python-multipart>=0.0.9 \
+    PyPDF2>=3.0.1 \
+    pytz \
+    psutil \
+    tiktoken \
+    uvicorn[standard]>=0.30.0
+
+# Install additional R packages that aren't available via apt
+RUN Rscript -e " \
+    options(repos = c(CRAN = 'http://cran.rstudio.com/')); \
+    packages <- c('meta', 'metafor', 'base64enc', 'evaluate'); \
+    for(pkg in packages) { \
+        tryCatch({ \
+            if(!require(pkg, character.only=TRUE, quietly=TRUE)) { \
+                install.packages(pkg, quiet=TRUE); \
+                cat('Installed:', pkg, '\n'); \
+            } else { \
+                cat('Already available:', pkg, '\n'); \
+            } \
+        }, error = function(e) { \
+            cat('Warning: Failed to install', pkg, ':', e\$message, '\n'); \
+        }); \
+    }" || echo "Warning: Some R packages may not have installed"
+
+# Copy application files
+COPY . /app/
+
+# Create required directories
+RUN mkdir -p /app/sessions /app/logs /app/config /app/outputs /app/tmp /app/metrics
+
+# Set up environment variables with defaults
+ENV GRADIO_SERVER_NAME=0.0.0.0
+ENV GRADIO_SERVER_PORT=7860
+ENV SESSIONS_DIR=/app/sessions
+ENV RSCRIPT_BIN=Rscript
+ENV RSCRIPT_TIMEOUT_SEC=300
+ENV DEBUG_R=0
+ENV PYTHONPATH=/app
+
+# Create non-root user for security
+RUN groupadd -r appuser && useradd -r -g appuser appuser
+RUN chown -R appuser:appuser /app
+USER appuser
+
+# Health check
+HEALTHCHECK --interval=30s --timeout=10s --start-period=60s --retries=3 \
+    CMD python -c "import requests; requests.get('http://localhost:7860/health', timeout=5)" || exit 1
+
+# Expose the application port
+EXPOSE 7860
+
+# Default command - can be overridden
+CMD ["python", "chatbot_langchain.py"]

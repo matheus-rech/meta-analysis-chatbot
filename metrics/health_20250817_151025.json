@@ -1,0 +1,20 @@
+{
+  "timestamp": "2025-08-17T15:10:25.687023",
+  "system_metrics": {
+    "timestamp": "2025-08-17T15:10:25.754240",
+    "load_average": "15:10:25 up 15 min,  1 user,  load average: 0.30, 0.41, 0.37",
+    "memory_info": "total        used        free      shared  buff/cache   available\nMem:           15995        1557        9119          46        5711       14437\nSwap:           4095           0        4095",
+    "method": "system_commands"
+  },
+  "r_backend": {
+    "status": "healthy",
+    "response_time": "fast"
+  },
+  "session_management": {
+    "status": "healthy",
+    "active_sessions": 1,
+    "old_sessions": 0,
+    "old_session_list": []
+  },
+  "overall_status": "healthy"
+}
