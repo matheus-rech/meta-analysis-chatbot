@@ -1029,7 +1029,8 @@ mcp_client = MCPClient()
 
 # For backward compatibility with tests
 # Create a single, shared EnhancedMCPToolWrapper instance for the application
-mcp_client = EnhancedMCPToolWrapper()
+# If needed, create a separate EnhancedMCPToolWrapper instance here.
+# enhanced_mcp_tool_wrapper = EnhancedMCPToolWrapper()
 
 if __name__ == "__main__":
     # Check for API keys
