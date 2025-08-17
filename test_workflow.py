@@ -325,7 +325,7 @@ class WorkflowTester:
         
         # Create detailed report
         report = {
-            'timestamp': datetime.datetime.now().isoformat(),
+            import datetime
             'overall_status': 'PASS' if success_rate >= 80 else 'PARTIAL' if success_rate >= 60 else 'FAIL',
             'success_rate': f"{success_rate:.1f}%",
             'total_tests': total_tests,
