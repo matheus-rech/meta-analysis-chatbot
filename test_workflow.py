@@ -308,7 +308,7 @@ class WorkflowTester:
         # Test docker-compose if available
         compose_file = self.repo_root / "docker-compose.yml"
         if compose_file.exists():
-            print(f"✓ Found docker-compose.yml")
+            print("✓ Found docker-compose.yml")
         else:
             print("⚠ No docker-compose.yml found")
             
