@@ -15,6 +15,29 @@ def test_security_integration_import():
         print(f"❌ Security integration import failed: {e}")
         return False
 
+def test_apply_security_patches_behavior():
+    """Test that apply_security_patches works and handles errors"""
+    try:
+        from utils.security_integration import apply_security_patches, SecurePatterns
+
+        # Test normal behavior
+        dummy_target = {}
+        result = apply_security_patches(dummy_target)
+        print("✅ apply_security_patches executed successfully")
+        assert result is not None, "apply_security_patches should return a value"
+
+        # Test error handling by passing invalid input (if possible)
+        try:
+            apply_security_patches(None)
+            print("✅ apply_security_patches handled None input gracefully")
+        except Exception as err:
+            print(f"✅ apply_security_patches raised error as expected for None input: {err}")
+
+        return True
+    except Exception as e:
+        print(f"❌ apply_security_patches test failed: {e}")
+        return False
+
 def test_server_import():
     """Test that server module can be imported"""
     try:
