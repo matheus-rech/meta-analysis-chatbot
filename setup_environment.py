@@ -163,7 +163,7 @@ class EnvironmentSetup:
         if openai_key:
             print(f"✓ OpenAI API key configured")
         else:
-            print(f"⚠ OpenAI API key not found")
+            print("⚠ OpenAI API key not found")
             
         if anthropic_key:
             print(f"✓ Anthropic API key configured") 
