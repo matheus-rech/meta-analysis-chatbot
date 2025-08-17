@@ -299,7 +299,7 @@ class EnvironmentSetup:
         
         # Print summary
         print(f"\n{'='*40}")
-        print(f"  SETUP COMPLETE")
+        print("  SETUP COMPLETE")
         print(f"{'='*40}")
         print(f"Next steps:")
         print(f"1. Configure API keys in .env file")
