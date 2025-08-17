@@ -35,7 +35,7 @@ class EnvironmentSetup:
         
         # Check R installation
         try:
-            r_result = subprocess.run(['R', '--version'], capture_output=True, text=True)
+            r_result = subprocess.run(['R', '--version'], capture_output=True, text=True, check=True)
             if r_result.returncode == 0:
                 r_version = r_result.stdout.split('\n')[0]
                 print(f"✓ {r_version}")
