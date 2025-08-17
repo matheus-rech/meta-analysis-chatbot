@@ -80,7 +80,7 @@ class EnvironmentSetup:
             # Import shlex for secure command splitting
             import shlex
             command = f'Rscript -e "{check_script}"'
-            result = subprocess.run(
+            result = subprocess.run(['Rscript', '-e', check_script], capture_output=True, text=True, check=True)
                 shlex.split(command),
                 capture_output=True, text=True
             )
