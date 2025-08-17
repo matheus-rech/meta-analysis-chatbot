@@ -110,6 +110,7 @@ class WorkflowTester:
                 
         print(f"\nR Backend Tests: {success_count}/{len(tests)} passed")
         return success_count == len(tests)
+        return self._run_r_tests(tests, header="2. Testing R Backend Directly")
         
     def test_mcp_server(self):
         """Test MCP server functionality"""
