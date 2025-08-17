@@ -12,6 +12,9 @@ jobs:
     strategy:
       matrix:
         python-version: [3.12, 3.13]
+    env:
+      OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+      ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
     steps:
       - uses: actions/checkout@v4
       - name: Set up Python ${{ matrix.python-version }}
@@ -21,11 +24,15 @@ jobs:
       - name: Install dependencies
         run: |
           python -m pip install --upgrade pip
-          pip install -r requirements.txt || true
+          # Install main application dependencies
+          pip install -r requirements-chatbot.txt || pip install -r requirements.txt || true
+          # Install test dependencies
+          pip install -r tests/requirements-test.txt
+          # Install Playwright browsers (only chromium for faster CI)
+          playwright install chromium
       - name: Run Python tests
         run: |
           if [ -f pytest.ini ] || [ -d tests ]; then
-            pip install pytest
             pytest || exit 1
           else
             echo "No Python tests found. Skipping."
