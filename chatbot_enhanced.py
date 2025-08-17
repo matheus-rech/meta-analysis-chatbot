@@ -1060,3 +1060,10 @@ if __name__ == "__main__":
         share=False,
         debug=True
     )
+
+# =====================================================================================
+#  Backward Compatibility Alias
+# =====================================================================================
+
+# Add alias for backward compatibility with test files and external imports
+EnhancedMCPToolWrapper = MCPClient
