@@ -96,7 +96,7 @@ class WorkflowTester:
         success_count = 0
         for test in tests:
             try:
-                result = subprocess.run(
+                result = subprocess.run(['Rscript', '-e', f"{test['script']}"], capture_output=True, text=True, timeout=30)
                     ['Rscript', '-e', test['script']],
                     capture_output=True, text=True, timeout=30
                 )
