@@ -428,7 +428,7 @@ class SecurePatterns:
         return secure_subprocess.run(cmd, **kwargs)
     
     @staticmethod
-    def safe_subprocess_popen(cmd, **kwargs) -> subprocess.Popen:
+    def safe_subprocess_popen(cmd: Union[str, List[str]], **kwargs) -> subprocess.Popen:
         """Safe replacement for subprocess.Popen"""
         kwargs.pop('shell', None)  # Never allow shell=True
         return secure_subprocess.popen(cmd, **kwargs)
