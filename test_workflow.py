@@ -6,6 +6,8 @@ Tests complete workflow with actual data
 import sys
 import sys
 import json
+import json
+import subprocess
 import subprocess
 import tempfile
 import csv
