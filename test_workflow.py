@@ -263,7 +263,7 @@ class WorkflowTester:
             cpu_percent = psutil.cpu_percent(interval=1)
             memory = psutil.virtual_memory()
             
-            print(f"✓ System metrics collection working")
+            print("✓ System metrics collection working")
             print(f"  CPU: {cpu_percent}%")
             print(f"  Memory: {memory.percent}%")
             
