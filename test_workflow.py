@@ -325,7 +325,7 @@ class WorkflowTester:
         
         # Create detailed report
         report = {
-            'timestamp': subprocess.run(['date'], capture_output=True, text=True).stdout.strip(),
+            'timestamp': datetime.datetime.now().isoformat(),
             'overall_status': 'PASS' if success_rate >= 80 else 'PARTIAL' if success_rate >= 60 else 'FAIL',
             'success_rate': f"{success_rate:.1f}%",
             'total_tests': total_tests,
