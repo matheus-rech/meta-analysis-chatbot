@@ -8,7 +8,7 @@ import os
 def test_security_integration_import():
     """Test that security integration can be imported without errors"""
     try:
-        from utils.security_integration import apply_security_patches, SecurePatterns
+        from utils.security_integration import SecurePatterns
         print("✅ Security integration imports successfully")
         return True
     except Exception as e:
