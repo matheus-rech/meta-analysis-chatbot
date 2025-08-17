@@ -48,7 +48,7 @@ class EnvironmentSetup:
             
         # Check Rscript
         try:
-            subprocess.run(['Rscript', '--version'], capture_output=True, text=True)
+            subprocess.run(['Rscript', '--version'], capture_output=True, text=True, check=True)
             print("✓ Rscript available")
         except FileNotFoundError:
             print("✗ Rscript not found")
