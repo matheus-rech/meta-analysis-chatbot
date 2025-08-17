@@ -352,7 +352,7 @@ class WorkflowTester:
             
         print(f"✓ Test report saved: {report_file}")
         print(f"\n{'='*50}")
-        print(f"  WORKFLOW TEST SUMMARY")
+        print("  WORKFLOW TEST SUMMARY")
         print(f"{'='*50}")
         print(f"Overall Status: {report['overall_status']}")
         print(f"Success Rate: {report['success_rate']}")
