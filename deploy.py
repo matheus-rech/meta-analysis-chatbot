@@ -219,7 +219,7 @@ class ProductionMonitor:
             elif cpu > 80 or memory > 80:
                 health_data['overall_status'] = 'warning'
                 
-        except:
+        except (KeyError, TypeError):
             pass  # Ignore errors in threshold checking
             
         # Save health check results
