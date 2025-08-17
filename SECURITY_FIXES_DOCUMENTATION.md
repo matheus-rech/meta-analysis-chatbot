@@ -8,8 +8,8 @@ This document describes the 5 critical security bugs that were identified and fi
 
 ### 1. Command Injection Vulnerability (CRITICAL)
 
-**File:** `server.py`
-**Issue:** Direct subprocess execution with user-controlled data allowing command injection
+**File:** `server.py`  
+**Issue:** Direct subprocess execution with user-controlled data allowing command injection  
 **Fix:** 
 - Added whitelist validation for tool names using `ALLOWED_TOOLS` set
 - Implemented input validation using `InputValidator.validate_string()`
@@ -42,8 +42,8 @@ proc = subprocess.Popen(
 
 ### 2. Race Condition in Server Management (HIGH)
 
-**File:** `app.py`
-**Issue:** Non-atomic check-and-start pattern allowing multiple processes to be started
+**File:** `app.py`  
+**Issue:** Non-atomic check-and-start pattern allowing multiple processes to be started  
 **Fix:**
 - Changed from `threading.Lock()` to `threading.RLock()` for better thread safety
 - Added `server_starting` flag to prevent concurrent starts
@@ -87,8 +87,8 @@ finally:
 
 ### 3. Path Traversal Vulnerability (CRITICAL)
 
-**File:** `scripts/tools/upload_data.R`
-**Issue:** Unsanitized file path construction allowing writing files outside intended directories
+**File:** `scripts/tools/upload_data.R`  
+**Issue:** Unsanitized file path construction allowing writing files outside intended directories  
 **Fix:**
 - Added `ALLOWED_FORMATS` whitelist for data formats
 - Added validation before file path construction
@@ -114,8 +114,8 @@ raw_data_path <- file.path(input_dir, paste0("raw_data.", args$data_format))
 
 ### 4. Memory Leak in Session Management (MEDIUM)
 
-**File:** `chatbot_enhanced.py`
-**Issue:** Sessions stored in memory without cleanup, causing unbounded memory growth
+**File:** `chatbot_enhanced.py`  
+**Issue:** Sessions stored in memory without cleanup, causing unbounded memory growth  
 **Fix:**
 - Added TTL-based session cleanup mechanism
 - Implemented automatic cleanup of expired sessions
@@ -152,8 +152,8 @@ def _cleanup_expired_sessions(self):
 
 ### 5. Missing Input Validation (HIGH)
 
-**Files:** Multiple files
-**Issue:** Lack of comprehensive input validation across the application
+**Files:** Multiple files  
+**Issue:** Lack of comprehensive input validation across the application  
 **Fix:**
 - Integrated existing `utils.validators.InputValidator` throughout the codebase
 - Added validation for tool names, session IDs, and other critical inputs
