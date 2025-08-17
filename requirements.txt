@@ -8,3 +8,4 @@ langchain
 pydantic
 pytest
 langchain-anthropic
+psutil
