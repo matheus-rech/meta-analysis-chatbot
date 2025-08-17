@@ -666,7 +666,6 @@ Error: {result.get('error', result.get('message', 'Unknown error'))}
 # This provides backward compatibility for test files and external imports
 EnhancedMCPToolWrapper = MCPClient
 
-
 # =====================================================================================
 #  LLM Integration
 # =====================================================================================
