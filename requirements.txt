@@ -4,5 +4,6 @@ pillow
 PyPDF2
 opencv-python-headless
 langchain
+langchain-openai
 pydantic
 pytest
