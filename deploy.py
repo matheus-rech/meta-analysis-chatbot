@@ -271,7 +271,7 @@ class ProductionMonitor:
                     self.cleanup_old_sessions()
                 # Cleanup old sessions once per hour
                 now = time.time()
-                if now - self.last_cleanup_time >= 3600:
+                self.last_cleanup_time = getattr(self, 'last_cleanup_time', 0)
                     self.cleanup_old_sessions()
                     self.last_cleanup_time = now
                 
