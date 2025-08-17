@@ -522,7 +522,42 @@ def main():
             try:
                 print("\nPress Ctrl+C to stop...")
                 while True:
-                    time.sleep(10)
+elif args.action == 'start':
+        checks = manager.check_prerequisites()
+        if checks['r_available'] and checks['directories']:
+            manager.start_application(args.mode)
+            
+            # Keep running to show monitoring
+            try:
+                print("
+Press Ctrl+C to stop...")
+                stop_event = threading.Event()
+                while not stop_event.is_set():
+                    status = manager.monitor.get_status_summary()
+                    print(f"Status: {status['status']} | R: {status['r_backend']} | Sessions: {status['sessions']}")
+                    stop_event.wait(10)
+                    
+            except KeyboardInterrupt:
+                print("
+Shutting down...")
+                manager.monitor.stop_monitoring()
+        else:
+            print("Cannot start - prerequisites not met")
+            
+    elif args.action == 'status':
+        manager.show_status()
+        
+    elif args.action == 'monitor':
+        manager.monitor.start_monitoring()
+        try:
+            print("Monitoring running... Press Ctrl+C to stop")
+            stop_event = threading.Event()
+            while not stop_event.is_set():
+                status = manager.monitor.get_status_summary()
+                print(f"[{datetime.now().strftime('%H:%M:%S')}] {status['status']} | R: {status['r_backend']} | Sessions: {status['sessions']}")
+                stop_event.wait(5)
+        except KeyboardInterrupt:
+            manager.monitor.stop_monitoring()
                     status = manager.monitor.get_status_summary()
                     print(f"Status: {status['status']} | R: {status['r_backend']} | Sessions: {status['sessions']}")
                     
