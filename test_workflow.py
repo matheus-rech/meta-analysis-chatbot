@@ -7,7 +7,7 @@ import sys
 import sys
 import json
 import json
-import subprocess
+import subprocess  # Ensure to use subprocess.run() with a list of arguments
 import subprocess
 import tempfile
 import csv
