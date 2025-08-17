@@ -382,7 +382,37 @@ class DeploymentManager:
             
         return checks
         
-    def start_application(self, mode='production'):
+# Import session management library
+# from flask import session  # Assuming Flask is used for session management
+
+def start_application(self, mode='production'):
+    """Start the application"""
+    print(f"
+Starting application in {mode} mode...")
+    
+    # Start monitoring
+    self.monitor.start_monitoring()
+    
+    # Verify user role from server-side session data
+    if self.verify_user_role('admin'):  # Implement this method to check server-side session
+        if mode == 'production':
+            # Start the main chatbot application
+            chatbot_script = self.repo_root / "chatbot_langchain.py"
+            if chatbot_script.exists():
+                print(f"Starting main application: {chatbot_script}")
+                print("Application would start here (in actual deployment)")
+                print("Access at: http://localhost:7860")
+            else:
+                print("⚠ Main application script not found")
+                
+        elif mode == 'docker':
+            print("For Docker deployment, run:")
+            print("  docker build -f Dockerfile.chatbot -t meta-analysis-chatbot .")
+            print("  docker run -p 7860:7860 -e OPENAI_API_KEY=\"your-key\" meta-analysis-chatbot")
+    else:
+        print("Unauthorized access. Please login with appropriate credentials.")
+        
+    return True
         """Start the application"""
         print(f"\nStarting application in {mode} mode...")
         
