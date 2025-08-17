@@ -658,6 +658,14 @@ Error: {result.get('error', result.get('message', 'Unknown error'))}
             return {"status": "error", "error": f"Image analysis failed: {str(e)}"}
 
 
+# =====================================================================================
+#  Enhanced MCP Tool Wrapper Alias
+# =====================================================================================
+
+# Create an alias for the enhanced MCP tool wrapper
+# This provides backward compatibility for test files and external imports
+# Create an alias for the enhanced MCP tool wrapper
+# This provides backward compatibility for test files and external imports
 
 # =====================================================================================
 #  LLM Integration
