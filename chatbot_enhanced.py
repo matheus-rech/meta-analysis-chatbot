@@ -664,7 +664,8 @@ Error: {result.get('error', result.get('message', 'Unknown error'))}
 
 # Create an alias for the enhanced MCP tool wrapper
 # This provides backward compatibility for test files and external imports
-EnhancedMCPToolWrapper = MCPClient
+# Create an alias for the enhanced MCP tool wrapper
+# This provides backward compatibility for test files and external imports
 
 # =====================================================================================
 #  LLM Integration
