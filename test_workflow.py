@@ -3,7 +3,7 @@
 End-to-End Testing Script for Meta-Analysis Chatbot
 Tests complete workflow with actual data
 """
-import os
+import sys
 import sys
 import json
 import subprocess
