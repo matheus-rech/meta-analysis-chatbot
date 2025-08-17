@@ -306,7 +306,12 @@ except ImportError:
         # Test Docker availability
         try:
             result = subprocess.run(['docker', '--version'], capture_output=True, text=True, check=True)
-                                 capture_output=True, text=True)
+# Test Docker availability
+        try:
+            result = subprocess.run(['docker', '--version'], capture_output=True, text=True, check=True)
+            if result.returncode == 0:
+                print(f"✓ Docker available: {result.stdout.strip()}")
+            else:
             if result.returncode == 0:
                 print(f"✓ Docker available: {result.stdout.strip()}")
             else:
