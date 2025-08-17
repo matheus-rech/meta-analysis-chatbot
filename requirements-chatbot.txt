@@ -1,19 +1,19 @@
 gradio>=5.11.0
 mcp
-fastapi
-uvicorn[standard]
+fastapi>=0.111.0
+uvicorn[standard]>=0.30.0
 pydantic
 openai
 anthropic
 rpy2
 numpy
 pandas
-python-multipart
+python-multipart>=0.0.9
 langchain
 langchain-openai
 langchain-anthropic
 tiktoken
 pytz
-pillow
-PyPDF2
+pillow>=10.3.0
+PyPDF2>=3.0.1
 
