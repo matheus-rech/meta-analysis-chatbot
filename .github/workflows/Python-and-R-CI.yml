@@ -30,6 +30,8 @@ jobs:
           pip install -r tests/requirements-test.txt
           # Install Playwright browsers (only chromium for faster CI)
           playwright install chromium
+      - name: Validate API key configuration
+        run: python validate_api_keys.py
       - name: Run Python tests
         run: |
           if [ -f pytest.ini ] || [ -d tests ]; then
