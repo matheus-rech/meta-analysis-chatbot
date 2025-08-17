@@ -4,7 +4,6 @@ Test security fixes implementation
 """
 import sys
 import os
-sys.path.append('.')
 
 def test_security_integration_import():
     """Test that security integration can be imported without errors"""
