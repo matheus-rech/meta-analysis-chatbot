@@ -283,7 +283,7 @@ class EnvironmentSetup:
         self.print_header("9. Environment Status Report")
         
         status = {
-            'timestamp': str(subprocess.run(['date'], capture_output=True, text=True).stdout.strip()),
+            'timestamp': datetime.now().isoformat(),
             'python_version': f"{sys.version_info.major}.{sys.version_info.minor}.{sys.version_info.micro}",
             'directories_created': str(len([d for d in [self.sessions_dir, self.logs_dir, self.config_dir] if d.exists()])),
             'api_keys_configured': bool(os.getenv('OPENAI_API_KEY') or os.getenv('ANTHROPIC_API_KEY')),
