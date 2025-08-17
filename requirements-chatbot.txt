@@ -14,6 +14,6 @@ langchain-openai
 langchain-anthropic
 tiktoken
 pytz
-pillow>=10.3.0
+pillow>=10.4.0
 PyPDF2>=3.0.1
 
