@@ -269,7 +269,12 @@ class ProductionMonitor:
                 # Cleanup old sessions periodically
                 if time.time() % 3600 < interval:  # Once per hour
                     self.cleanup_old_sessions()
-                    
+                # Cleanup old sessions once per hour
+                now = time.time()
+                if now - self.last_cleanup_time >= 3600:
+                    self.cleanup_old_sessions()
+                    self.last_cleanup_time = now
+                
                 # Wait for next check
                 time.sleep(interval)
                 
