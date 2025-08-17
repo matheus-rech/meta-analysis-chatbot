@@ -296,7 +296,7 @@ class WorkflowTester:
                 
         # Test Docker availability
         try:
-            result = subprocess.run(['docker', '--version'], 
+            result = subprocess.run(['docker', '--version'], capture_output=True, text=True, check=True)
                                  capture_output=True, text=True)
             if result.returncode == 0:
                 print(f"✓ Docker available: {result.stdout.strip()}")
