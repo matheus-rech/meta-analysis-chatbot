@@ -33,9 +33,8 @@ if tool not in ALLOWED_TOOLS:
 # Validate and sanitize inputs
 tool = InputValidator.validate_string(tool, pattern='alphanumeric')
 
-# Use shlex.quote for safe escaping
-proc = subprocess.Popen(
-# Pass validated arguments directly (do not use shlex.quote with list arguments)
+# Pass validated arguments directly. Since we are passing a list of arguments to Popen,
+# the shell is not used and `shlex.quote` is not necessary.
 proc = subprocess.Popen(
     [RSCRIPT_BIN, '--vanilla', SCRIPTS_ENTRY, tool, args_file, session_dir],
     ...
