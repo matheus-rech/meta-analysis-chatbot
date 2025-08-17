@@ -174,7 +174,7 @@ class EnvironmentSetup:
             print(f"\n⚠ No API keys configured!")
             print("  Set environment variables:")
             print("    export OPENAI_API_KEY='your-openai-key'")
-            print(f"    export ANTHROPIC_API_KEY='your-anthropic-key'")  # Change to: print("    export ANTHROPIC_API_KEY='your-anthropic-key'")
+            print(f"    export ANTHROPIC_API_KEY='your-anthropic-key'")
             print(f"  Or edit .env file")
             
         return True
