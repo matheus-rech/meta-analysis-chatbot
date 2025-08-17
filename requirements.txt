@@ -1,0 +1,8 @@
+gradio
+pytz
+pillow
+PyPDF2
+opencv-python-headless
+langchain
+pydantic
+pytest
