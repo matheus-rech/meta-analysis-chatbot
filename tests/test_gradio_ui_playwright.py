@@ -22,7 +22,8 @@ TEST_CONFIG = {
     "base_url": os.getenv("GRADIO_URL", "http://localhost:7860"),
     "timeout": 30000,  # 30 seconds
     "slow_mo": 100 if os.getenv("DEBUG") else 0,
-    "headless": os.getenv("HEADLESS", "true").lower() == "true"
+    "headless": os.getenv("HEADLESS", "true").lower() == "true",
+    "health_check_timeout": 5  # 5 seconds for health checks
 }
 
 # Real test datasets
@@ -87,10 +88,26 @@ def gradio_server():
     env = os.environ.copy()
     env["PYTHONUNBUFFERED"] = "1"
     env["TEST_MODE"] = "1"
-    if "OPENAI_API_KEY" not in env and "ANTHROPIC_API_KEY" not in env:
-        # Placeholder for actual key management
-        # TODO: Implement proper key management for API keys.
-        pytest.fail("Neither OPENAI_API_KEY nor ANTHROPIC_API_KEY is set in the environment. Please provide at least one API key for the Gradio server to function.")
+    
+    # Check for API keys with more informative error handling
+    has_openai = "OPENAI_API_KEY" in env and env["OPENAI_API_KEY"].strip()
+    has_anthropic = "ANTHROPIC_API_KEY" in env and env["ANTHROPIC_API_KEY"].strip()
+    
+    if not has_openai and not has_anthropic:
+        # In CI environments, provide helpful debugging info
+        if os.getenv("CI") or os.getenv("GITHUB_ACTIONS"):
+            available_keys = [k for k in env.keys() if "API_KEY" in k]
+            pytest.fail(
+                f"Neither OPENAI_API_KEY nor ANTHROPIC_API_KEY is set in the CI environment. "
+                f"Available API keys: {available_keys}. "
+                f"Please ensure secrets are configured in GitHub Actions. "
+                f"See: https://docs.github.com/en/actions/security-guides/encrypted-secrets"
+            )
+        else:
+            pytest.fail(
+                "Neither OPENAI_API_KEY nor ANTHROPIC_API_KEY is set in the environment. "
+                "Please provide at least one API key for the Gradio server to function."
+            )
 
     proc = subprocess.Popen(
         [sys.executable, str(server_path)],
