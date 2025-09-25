@@ -1,15 +1,14 @@
 {
-  "timestamp": "Sun Aug 17 15:08:15 UTC 2025",
-  "overall_status": "PASS",
-  "success_rate": "100.0%",
+  "overall_status": "FAIL",
+  "success_rate": "50.0%",
   "total_tests": 6,
-  "passed_tests": 6,
-  "failed_tests": 0,
+  "passed_tests": 3,
+  "failed_tests": 3,
   "test_results": {
-    "r_backend": true,
+    "r_backend": false,
     "mcp_server": true,
-    "session_management": true,
-    "data_processing": true,
+    "session_management": false,
+    "data_processing": false,
     "monitoring": true,
     "docker": true
   },
