@@ -4,10 +4,7 @@ End-to-End Testing Script for Meta-Analysis Chatbot
 Tests complete workflow with actual data
 """
 import sys
-import sys
 import json
-import json
-import subprocess  # Ensure to use subprocess.run() with a list of arguments
 import subprocess
 import tempfile
 import csv
@@ -94,12 +91,6 @@ class WorkflowTester:
         ]
         
         success_count = 0
-        for test in tests:
-            try:
-                result = subprocess.run(['Rscript', '-e', f"{test['script']}"], capture_output=True, text=True, timeout=30)
-                                    result = subprocess.run(['Rscript', '-e', test['script']], capture_output=True, text=True, timeout=30)
-                    capture_output=True, text=True, timeout=30
-success_count = 0
         for test in tests:
             try:
                 result = subprocess.run(
@@ -197,16 +188,7 @@ success_count = 0
             
         except ImportError:
             print("⚠ pandas not available, testing with built-in csv")
-except ImportError:
-            print("⚠ pandas not available, testing with built-in csv")
-            # import os.path
-            # Validate the csv_file path to prevent path traversal
-            if not os.path.abspath(csv_file).startswith(os.path.abspath(self.allowed_directory)):
-                print("✗ Invalid file path")
-                return False
             with open(csv_file, 'r') as f:
-                import csv
-                reader = csv.DictReader(f)
                 import csv
                 reader = csv.DictReader(f)
                 rows = list(reader)
@@ -312,12 +294,6 @@ except ImportError:
         # Test Docker availability
         try:
             result = subprocess.run(['docker', '--version'], capture_output=True, text=True, check=True)
-# Test Docker availability
-        try:
-            result = subprocess.run(['docker', '--version'], capture_output=True, text=True, check=True)
-            if result.returncode == 0:
-                print(f"✓ Docker available: {result.stdout.strip()}")
-            else:
             if result.returncode == 0:
                 print(f"✓ Docker available: {result.stdout.strip()}")
             else:
