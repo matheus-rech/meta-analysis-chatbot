@@ -1,0 +1,12 @@
+{
+  "timestamp": 1758807910.3379934,
+  "duration_seconds": 3.3983287811279297,
+  "overall_success": true,
+  "detailed_results": {
+    "end_to_end_workflow": true,
+    "environment_setup": true,
+    "components_available": true,
+    "packages_installed": true
+  },
+  "summary": "Complete workflow validation for meta-analysis chatbot"
+}
